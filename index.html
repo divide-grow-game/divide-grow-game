@@ -47,6 +47,7 @@ td,th{text-align:left;padding:8px;border-bottom:1px solid #39496e}
 .gear-list{height:650px;overflow:auto;border:1px solid #3b4a70;border-radius:12px;background:#0e162b;padding:7px}
 .gear-row{display:grid;grid-template-columns:minmax(0,1fr) 110px 125px;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid #2e3d60;font-size:13px}
 .gear-row:last-child{border-bottom:0}
+.grade-group-title{padding:9px 10px;margin-top:6px;background:#202e4e;color:#ffe68e;font-weight:800;border-radius:8px;border:1px solid #52658e}
 .gear-name{font-weight:700}.gear-meta{color:var(--muted);font-size:12px}
 .grade{display:inline-block;border-radius:6px;padding:2px 7px;background:#2e3a5a;border:1px solid #586a97;font-size:11px;white-space:nowrap}
 .grade-1,.grade-2{color:#ffe58e}.grade-3,.grade-4{color:#f3baff}.grade-5,.grade-6,.grade-7{color:#9bd1ff}
@@ -108,7 +109,7 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
 <section id="gear" class="grid hidden">
   <div class="panel">
     <h2>🎒 장비 전체 목록</h2>
-    <p class="muted">장비 50,000종을 100개씩 나누어 표시해. 페이지를 이동해 전체 장비를 살펴볼 수 있어. 목록 뒤쪽으로 갈수록 등급과 성능, 가격이 높아져.</p>
+    <p class="muted">장비 50,000종을 등급별로 모아 표시해. 같은 등급의 장비는 한곳에 모이며, 100개씩 페이지를 나누어 보여 줘.</p>
     <div class="stat"><span>전체 장비 종류</span><b id="catalogCount">50,000종</b></div>
     <div class="stat"><span>보유 장비</span><b id="inventoryCount">0개</b></div>
     <div class="gear-tools">
@@ -136,7 +137,7 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
 <section id="pvp" class="grid hidden">
   <div class="panel half">
     <h2>🌐 온라인 자동 PvP</h2><p class="muted">같은 서버에 접속한 다른 플레이어와 자동 대전을 진행해.</p>
-    <label>서버 주소<input id="serverUrl" value="http://localhost:3000"></label>
+    <label>서버 주소<input id="serverUrl" value="" placeholder="배포된 서버 주소 입력 (예: https://서버주소)"></label>
     <label>온라인 닉네임<input id="onlineName" maxlength="16" placeholder="게임 닉네임"></label>
     <div class="actions"><button onclick="connectServer()">서버 접속</button><button class="secondary" onclick="findOpponent()">🎲 랜덤 상대 찾기</button><button class="secondary" onclick="cancelQueue()">대기 취소</button></div>
     <label>대결할 플레이어 닉네임<input id="targetPlayer" maxlength="16" placeholder="상대방의 온라인 닉네임"></label>
@@ -297,12 +298,14 @@ function renderGearCatalog(resetPage=false){
   const list=$('gearList');if(!list)return;
   if(resetPage)gearPage=0;
   const arr=createCatalog(),q=($('gearSearch').value||'').trim().toLowerCase(),filter=$('gearFilter').value;
-  const selected=arr.filter(g=>(filter==='all'||g.slot===filter)&&(!q||g.name.toLowerCase().includes(q)||String(g.grade).includes(q)));
+  const selected=arr.filter(g=>(filter==='all'||g.slot===filter)&&(!q||g.name.toLowerCase().includes(q)||String(g.grade).includes(q)))
+    .sort((a,b)=>a.grade-b.grade||SLOTS.findIndex(x=>x[0]===a.slot)-SLOTS.findIndex(x=>x[0]===b.slot)||a.id-b.id);
   const pageCount=Math.max(1,Math.ceil(selected.length/GEAR_PAGE_SIZE));
   gearPage=Math.max(0,Math.min(gearPage,pageCount-1));
   const start=gearPage*GEAR_PAGE_SIZE;
   const pageItems=selected.slice(start,start+GEAR_PAGE_SIZE);
-  const rows=pageItems.map(g=>`<div class="gear-row"><div><div class="gear-name">${g.icon} ${safeText(g.name)}</div><div class="gear-meta">${g.slotName} · ${bonusText(g.bonus)}</div></div><div><span class="grade grade-${g.grade}">${g.grade}등급</span><div class="gear-meta">${fmtMoney(g.price)}G</div></div><button class="gear-buy" data-buygear="${g.id}">구매</button></div>`).join('');
+  let lastGrade=null;
+  const rows=pageItems.map(g=>{const heading=lastGrade!==g.grade?`<div class="grade-group-title">${g.grade}등급 장비</div>`:'';lastGrade=g.grade;return heading+`<div class="gear-row"><div><div class="gear-name">${g.icon} ${safeText(g.name)}</div><div class="gear-meta">${g.slotName} · ${bonusText(g.bonus)}</div></div><div><span class="grade grade-${g.grade}">${g.grade}등급</span><div class="gear-meta">${fmtMoney(g.price)}G</div></div><button class="gear-buy" data-buygear="${g.id}">구매</button></div>`}).join('');
   const pagination=selected.length?`<div class="gear-pagination"><button class="secondary" data-page="prev" ${gearPage===0?'disabled':''}>이전</button><span class="gear-page-label">${start+1}~${Math.min(start+GEAR_PAGE_SIZE,selected.length)} / ${selected.length.toLocaleString('ko-KR')}개<br>${gearPage+1} / ${pageCount}페이지</span><button class="secondary" data-page="next" ${gearPage>=pageCount-1?'disabled':''}>다음</button></div>`:'';
   list.innerHTML=rows||'<p class="small">검색 결과가 없어.</p>';
   list.insertAdjacentHTML('beforeend',pagination);
@@ -387,7 +390,7 @@ function autoFight(hero,stage){
 async function api(path,body){const response=await fetch(apiBase+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw Error(data.error||'서버 오류');return data}
 async function connectServer(){
   let h=activeHero();if(!h)return alert('먼저 분신을 만들어 줘.');
-  apiBase=$('serverUrl').value.trim().replace(/\/$/,'');let name=$('onlineName').value.trim();if(!name)return alert('온라인 닉네임을 입력해 줘.');
+  apiBase=$('serverUrl').value.trim().replace(/\/$/,'');if(!apiBase)return alert('온라인 PvP 서버가 아직 배포되지 않았어. 서버 주소를 먼저 준비해야 해.');let name=$('onlineName').value.trim();if(!name)return alert('온라인 닉네임을 입력해 줘.');
   if(!game.playerId)game.playerId=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
   try{
     await api('/api/register',{id:game.playerId,name,heroName:h.name,rank:h.rank,power:String(combatPower(h))});
@@ -422,7 +425,7 @@ async function checkMatch(){
 }
 async function loadRanking(){
   try{let r=await api('/api/rankings');$('rankingTable').innerHTML='<table><tr><th>순위</th><th>플레이어</th><th>분신</th><th>등급</th><th>전투력</th><th>승리</th></tr>'+r.players.map((p,i)=>`<tr><td>${i+1}</td><td>${safeText(p.name)}</td><td>${safeText(p.heroName||'-')}</td><td>${p.rank}등급</td><td>${safeText(p.power)}</td><td>${p.wins}</td></tr>`).join('')+'</table>'}
-  catch(e){$('rankingTable').textContent='온라인 서버에 연결할 수 없어. 서버를 실행한 뒤 다시 시도해 줘.'}
+  catch(e){$('rankingTable').textContent='온라인 PvP 서버가 아직 연결되지 않았어. GitHub Pages는 화면 파일만 실행하므로 별도 온라인 서버를 배포해야 랭킹을 사용할 수 있어.'}
 }
 $('rankOdds').innerHTML=rankOddsHtml();
 render();
