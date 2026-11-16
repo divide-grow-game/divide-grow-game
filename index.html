@@ -51,6 +51,8 @@ td,th{text-align:left;padding:8px;border-bottom:1px solid #39496e}
 .grade{display:inline-block;border-radius:6px;padding:2px 7px;background:#2e3a5a;border:1px solid #586a97;font-size:11px;white-space:nowrap}
 .grade-1,.grade-2{color:#ffe58e}.grade-3,.grade-4{color:#f3baff}.grade-5,.grade-6,.grade-7{color:#9bd1ff}
 .gear-buy{padding:7px 9px;font-size:12px;white-space:nowrap}
+.gear-pagination{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 4px;position:sticky;bottom:0;background:#0e162b;border-top:1px solid #3b4a70}
+.gear-pagination button{padding:7px 12px}.gear-page-label{font-size:12px;color:var(--muted);min-width:105px;text-align:center}
 footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
 @media(max-width:720px){.half{grid-column:span 12}.hero{align-items:flex-start}.gear-tools{grid-template-columns:1fr}.gear-row{grid-template-columns:minmax(0,1fr) auto;}.gear-row button{grid-column:2;grid-row:1/3}.gear-list{height:560px}}
 </style>
@@ -106,12 +108,12 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
 <section id="gear" class="grid hidden">
   <div class="panel">
     <h2>🎒 장비 전체 목록</h2>
-    <p class="muted">장비 50,000종을 하나의 긴 목록으로 표시해. 목록 위쪽은 1등급부터 시작하고, 아래쪽으로 갈수록 15등급에 가까워지며 성능과 가격이 높아져.</p>
+    <p class="muted">장비 50,000종을 100개씩 나누어 표시해. 페이지를 이동해 전체 장비를 살펴볼 수 있어. 목록 뒤쪽으로 갈수록 등급과 성능, 가격이 높아져.</p>
     <div class="stat"><span>전체 장비 종류</span><b id="catalogCount">50,000종</b></div>
     <div class="stat"><span>보유 장비</span><b id="inventoryCount">0개</b></div>
     <div class="gear-tools">
-      <input id="gearSearch" placeholder="장비 이름 검색" oninput="renderGearCatalog()">
-      <select id="gearFilter" onchange="renderGearCatalog()"><option value="all">모든 장비 부위</option><option value="weapon">무기</option><option value="armor">갑옷</option><option value="helmet">투구</option><option value="gloves">장갑</option><option value="boots">신발</option></select>
+      <input id="gearSearch" placeholder="장비 이름 검색" oninput="renderGearCatalog(true)">
+      <select id="gearFilter" onchange="renderGearCatalog(true)"><option value="all">모든 장비 부위</option><option value="weapon">무기</option><option value="armor">갑옷</option><option value="helmet">투구</option><option value="gloves">장갑</option><option value="boots">신발</option></select>
     </div>
     <div id="gearList" class="gear-list"><p class="small">장비 목록을 불러오는 중...</p></div>
   </div>
@@ -180,7 +182,8 @@ const SLOT_STATS={
 };
 let game={money:500,gems:5,heroes:[],selectedHeroId:null,wins:0,losses:0,inventory:[],playerId:null,onlineWins:0};
 let apiBase='http://localhost:3000',pollTimer=null;
-let allGear=null,catalogRendered=false;
+let allGear=null,catalogRendered=false,gearPage=0;
+const GEAR_PAGE_SIZE=100;
 
 function big(v){try{return BigInt(v??0)}catch{return 0n}}
 function clampStat(v){v=big(v);return v<0n?0n:(v>MAX_VALUE?MAX_VALUE:v)}
@@ -290,14 +293,27 @@ function createCatalog(){
 }
 function bonusText(obj){return Object.entries(obj||{}).map(([k,v])=>`${STAT_DEFS.find(x=>x[0]===k)?.[1]||k} +${v}`).join(' · ')}
 function updateCatalogCount(){$('catalogCount').textContent='50,000종';$('inventoryCount').textContent=game.inventory.length+'개'}
-function renderGearCatalog(){
+function renderGearCatalog(resetPage=false){
   const list=$('gearList');if(!list)return;
+  if(resetPage)gearPage=0;
   const arr=createCatalog(),q=($('gearSearch').value||'').trim().toLowerCase(),filter=$('gearFilter').value;
   const selected=arr.filter(g=>(filter==='all'||g.slot===filter)&&(!q||g.name.toLowerCase().includes(q)||String(g.grade).includes(q)));
-  list.innerHTML=selected.map(g=>`<div class="gear-row"><div><div class="gear-name">${g.icon} ${safeText(g.name)}</div><div class="gear-meta">${g.slotName} · ${bonusText(g.bonus)}</div></div><div><span class="grade grade-${g.grade}">${g.grade}등급</span><div class="gear-meta">${fmtMoney(g.price)}G</div></div><button class="gear-buy" data-buygear="${g.id}">구매</button></div>`).join('')||'<p class="small">검색 결과가 없어.</p>';
+  const pageCount=Math.max(1,Math.ceil(selected.length/GEAR_PAGE_SIZE));
+  gearPage=Math.max(0,Math.min(gearPage,pageCount-1));
+  const start=gearPage*GEAR_PAGE_SIZE;
+  const pageItems=selected.slice(start,start+GEAR_PAGE_SIZE);
+  const rows=pageItems.map(g=>`<div class="gear-row"><div><div class="gear-name">${g.icon} ${safeText(g.name)}</div><div class="gear-meta">${g.slotName} · ${bonusText(g.bonus)}</div></div><div><span class="grade grade-${g.grade}">${g.grade}등급</span><div class="gear-meta">${fmtMoney(g.price)}G</div></div><button class="gear-buy" data-buygear="${g.id}">구매</button></div>`).join('');
+  const pagination=selected.length?`<div class="gear-pagination"><button class="secondary" data-page="prev" ${gearPage===0?'disabled':''}>이전</button><span class="gear-page-label">${start+1}~${Math.min(start+GEAR_PAGE_SIZE,selected.length)} / ${selected.length.toLocaleString('ko-KR')}개<br>${gearPage+1} / ${pageCount}페이지</span><button class="secondary" data-page="next" ${gearPage>=pageCount-1?'disabled':''}>다음</button></div>`:'';
+  list.innerHTML=rows||'<p class="small">검색 결과가 없어.</p>';
+  list.insertAdjacentHTML('beforeend',pagination);
   catalogRendered=true;updateCatalogCount();
 }
-$('gearList').addEventListener('click',e=>{const b=e.target.closest('[data-buygear]');if(b)buyGear(Number(b.dataset.buygear))});
+$('gearList').addEventListener('click',e=>{
+  const buy=e.target.closest('[data-buygear]');
+  if(buy){buyGear(Number(buy.dataset.buygear));return}
+  const page=e.target.closest('[data-page]');
+  if(page){gearPage+=page.dataset.page==='next'?1:-1;renderGearCatalog()}
+});
 function buyGear(id){
   const g=createCatalog().find(x=>x.id===id);if(!g)return;
   if(game.money<g.price){alert('골드가 부족해! 이 장비의 가격은 '+fmtMoney(g.price)+'G야.');return}
