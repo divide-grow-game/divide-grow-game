@@ -585,7 +585,37 @@ function autoFight(hero,stage){
   }
   return {win:hp>0n&&ehp<=0n,lines};
 }
-async function api(path,body){const response=await fetch(apiBase+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw Error(data.error||'서버 오류');return data}
+
+async function api(path, body) {
+  const url = apiBase + path;
+
+  const response = await fetch(url, {
+    method: body ? 'POST' : 'GET',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+
+  const text = await response.text();
+
+  let data;
+
+  try {
+    data = JSON.parse(text);
+  } catch (error) {
+    throw Error(
+      `서버가 JSON이 아닌 응답을 보냈어.\n요청 주소: ${url}\n응답 시작 부분: ${text.slice(0, 150)}`
+    );
+  }
+
+  if (!response.ok) {
+    throw Error(data.error || '서버 오류');
+  }
+
+  return data;
+}
+
 async function connectServer(){
   let h=activeHero();if(!h)return alert('먼저 분신을 만들어 줘.');
   apiBase=$('serverUrl').value.trim().replace(/\/$/,'');if(!apiBase)return alert('온라인 PvP 서버가 아직 배포되지 않았어. 서버 주소를 먼저 준비해야 해.');let name=$('onlineName').value.trim();if(!name)return alert('온라인 닉네임을 입력해 줘.');
