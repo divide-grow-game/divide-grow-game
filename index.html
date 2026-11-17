@@ -265,7 +265,32 @@ async function joinBoss(bossId) {
     alert('먼저 온라인 서버에 접속해 줘.');
     return;
   }
+
   
+async function joinBoss(bossId) {
+  if (!game.playerId) {
+    alert('먼저 온라인 서버에 접속해 줘.');
+    return;
+  }
+
+  try {
+    const result = await api(
+      `/api/bosses/${bossId}/join`,
+      { id: game.playerId }
+    );
+
+    selectedBossId = bossId;
+    bossPlayerHp = Number(result.currentHp);
+    bossMaxPlayerHp = Number(result.maxHp);
+
+    alert('보스전에 입장했어!');
+    renderBossBattle();
+
+  } catch (error) {
+    alert('보스 입장 실패: ' + error.message);
+  }
+}
+
 function renderBossBattle() {
   const boss = bossData.find(
     b => b.boss_id === selectedBossId
