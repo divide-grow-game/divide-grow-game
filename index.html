@@ -265,6 +265,59 @@ async function joinBoss(bossId) {
     alert('먼저 온라인 서버에 접속해 줘.');
     return;
   }
+  
+function renderBossBattle() {
+  const boss = bossData.find(
+    b => b.boss_id === selectedBossId
+  );
+
+  if (!boss) return;
+
+  $('bossContribution').innerHTML = `
+    <h3>${safeText(boss.name)}</h3>
+    <p>내 체력: ${fmt(bossPlayerHp)} / ${fmt(bossMaxPlayerHp)}</p>
+    <p>보스 체력: ${fmt(boss.current_hp)} / ${fmt(boss.max_hp)}</p>
+    <button class="primary"
+      onclick="attackBoss(${selectedBossId})">
+      ⚔️ 보스 공격!
+    </button>
+  `;
+}
+
+async function attackBoss(bossId) {
+  if (!game.playerId) return;
+
+  try {
+    const result = await api(
+      `/api/bosses/${bossId}/attack`,
+      { id: game.playerId }
+    );
+
+    if (!result.success) {
+      alert(result.message);
+      return;
+    }
+
+    bossPlayerHp = Number(result.playerHp);
+
+    alert(
+      `보스에게 ${fmt(result.damage)} 피해!\n` +
+      `보스의 반격으로 ${fmt(result.bossDamage)} 피해를 받았어!\n` +
+      `내 남은 체력: ${fmt(bossPlayerHp)}`
+    );
+
+    await renderBossPreview();
+    renderBossBattle();
+
+    if (result.defeated) {
+      alert('축하해! 보스를 토벌했어!');
+    }
+
+  } catch (error) {
+    alert('공격 실패: ' + error.message);
+  }
+}
+
 
   try {
     const result = await api(
