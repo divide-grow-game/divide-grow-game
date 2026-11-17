@@ -207,7 +207,85 @@ const GEAR_PAGE_SIZE=100;
 
 const BOSS_NAMES=['고대의 화염룡','심연의 해신','천공의 거신','망각의 수호자','칠흑의 늑대왕','시간의 파수꾼','별을 삼키는 자','영원의 골렘','폭풍의 군주','황혼의 여왕','태초의 정령','심판의 기계신','빙하의 제왕','독안개 군주','차원의 포식자','무한의 그림자','태양의 수호룡','달의 마녀왕','혼돈의 군주','창세의 용'];
 function bossWindowInfo(){const now=new Date(),local=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Seoul'}));const h=local.getHours();let end=new Date(local);if(h<10){end.setHours(10,0,0,0)}else if(h<22){end.setHours(22,0,0,0)}else{end.setDate(end.getDate()+1);end.setHours(10,0,0,0)}return {label:h>=10&&h<22?'오전 10시~오후 10시':'오후 10시~다음 날 오전 10시',remaining:Math.max(0,end-local)}}
-function renderBossPreview(){const info=bossWindowInfo();$('bossCycle').textContent=info.label;$('bossCountdown').textContent=new Date(info.remaining).toISOString().slice(11,19);$('bossCards').innerHTML=[0,1,2].map((n)=>{const idx=(Math.floor((Date.now()-3600000)/43200000)*3+n)%BOSS_NAMES.length;return `<div class="unit"><div class="emoji">🐉</div><b>${BOSS_NAMES[idx]}</b><p class="small">월드 보스 · 공동 전투 대기</p><p class="small">공유 체력과 입장 기능은 서버 연결 후 활성화</p><button class="secondary" disabled>보스 선택 및 입장 (서버 필요)</button></div>`}).join('')}
+
+let bossData = [];
+let selectedBossId = null;
+let bossPlayerHp = 0;
+let bossMaxPlayerHp = 1000;
+
+async function renderBossPreview(){
+  const info = bossWindowInfo();
+
+  $('bossCycle').textContent = info.label;
+  $('bossCountdown').textContent =
+    new Date(info.remaining).toISOString().slice(11,19);
+
+  try {
+    const result = await api('/api/bosses');
+
+    bossData = result.bosses;
+
+    $('bossCards').innerHTML = bossData.map(boss => {
+      const hp = big(boss.current_hp);
+      const maxHp = big(boss.max_hp);
+      const percent = maxHp > 0n
+        ? Number(hp * 100n / maxHp)
+        : 0;
+
+      return `
+        <div class="unit">
+          <div class="emoji">🐉</div>
+          <b>${safeText(boss.name)}</b>
+          <p>보스 체력: ${fmt(hp)} / ${fmt(maxHp)}</p>
+          <div class="bar">
+            <div class="bar-fill"
+                 style="width:${percent}%"></div>
+          </div>
+          <p class="small">
+            ${boss.defeated ? '토벌 완료' : '전투 가능'}
+          </p>
+          <button
+            class="secondary"
+            ${boss.defeated ? 'disabled' : ''}
+            onclick="joinBoss(${boss.boss_id})">
+            보스 선택 및 입장
+          </button>
+        </div>
+      `;
+    }).join('');
+
+  } catch (error) {
+    $('bossCards').textContent =
+      '보스 서버 연결 실패: ' + error.message;
+  }
+}
+
+async function joinBoss(bossId) {
+  if (!game.playerId) {
+    alert('먼저 온라인 서버에 접속해 줘.');
+    return;
+  }
+
+  try {
+    const result = await api(
+      `/api/bosses/${bossId}/join`,
+      { id: game.playerId }
+    );
+
+    selectedBossId = bossId;
+    bossPlayerHp = Number(result.currentHp);
+    bossMaxPlayerHp = Number(result.maxHp);
+
+    alert(
+      `보스전에 입장했어!\n내 체력: ${bossPlayerHp}`
+    );
+
+    renderBossBattle();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
 async function sendPublicMessage(){const msg=$('publicMessageInput').value.trim();if(!msg)return;alert('실시간 공용 채팅 서버가 아직 연결되지 않았어. 메시지를 전송하지 않았어.');}
 async function sendPrivateMessage(){const names=$('privateRecipients').value.split(',').map(x=>x.trim()).filter(Boolean),msg=$('privateMessageInput').value.trim();if(!names.length)return alert('대화할 닉네임을 입력해 줘.');if(!msg)return;alert('실시간 비밀 채팅 서버가 아직 연결되지 않았어. 메시지를 전송하지 않았어.');}
 
