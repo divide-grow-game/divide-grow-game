@@ -80,6 +80,8 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
   <button class="tab" data-tab="battle" onclick="tab('battle')">⚔️ 전투</button>
   <button class="tab" data-tab="pvp" onclick="tab('pvp')">🌐 온라인 PvP</button>
   <button class="tab" data-tab="ranking" onclick="tab('ranking')">🏆 랭킹</button>
+  <button class="tab" data-tab="boss" onclick="tab('boss')">🐉 보스전</button>
+  <button class="tab" data-tab="chat" onclick="tab('chat')">💬 채팅</button>
 </nav>
 
 <section id="create" class="grid">
@@ -147,8 +149,24 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
   <div class="panel half"><h2>온라인 대전 결과</h2><div id="pvpLog" class="log">온라인 대전 기록이 없어.</div></div>
 </section>
 
+<section id="boss" class="grid hidden">
+  <div class="panel"><h2>🐉 월드 보스 토벌</h2>
+    <p class="muted">매일 오전 10시~오후 10시, 오후 10시~다음 날 오전 10시 주기로 보스가 교체돼. 한 주기마다 보스 3종이 등장하며 원하는 보스를 선택할 수 있어.</p>
+    <div class="stat"><span>현재 토벌 주기</span><b id="bossCycle">시간 확인 중...</b></div>
+    <div class="stat"><span>다음 갱신까지</span><b id="bossCountdown">--:--:--</b></div>
+    <p class="small" id="bossOnlineStatus">공용 보스전은 모든 플레이어가 같은 보스 체력과 기여도를 공유하는 서버가 필요해. 현재 GitHub Pages 단독 모드에서는 실제 공동 전투가 시작되지 않아.</p>
+    <div id="bossCards" class="cards"></div>
+  </div>
+  <div class="panel"><h2>📊 내 보스 기여도</h2><div id="bossContribution">온라인 보스 서버 연결 후 피해량과 예상 보상을 표시해.</div></div>
+  <div class="panel"><h2>🎁 보상 규칙</h2><p>보스를 제한 시간 안에 처치하면 누적 피해 기여도에 비례해 골드와 무작위 성장 보상을 지급해. 토벌 실패 시 보상은 없지만 골드나 능력치 손실은 없어.</p><p>전투 중 나가거나 재접속해도 서버에 기록된 기여도는 유지되고, 오프라인 상태에서 토벌이 성공해도 보상은 계정에 자동 지급돼.</p></div>
+</section>
+<section id="chat" class="grid hidden">
+  <div class="panel"><h2>💬 공용 채팅</h2><p class="muted">온라인에 접속한 모든 플레이어가 함께 대화하는 채팅이야.</p><div id="publicMessages" class="log">실시간 공용 채팅은 채팅 서버 연결 후 사용할 수 있어.</div><div class="actions"><input id="publicMessageInput" placeholder="모두에게 보낼 메시지" maxlength="300"><button onclick="sendPublicMessage()">전송</button></div></div>
+  <div class="panel"><h2>🔒 비밀 채팅</h2><p class="muted">닉네임을 지정한 플레이어들만 참여하는 대화방이야.</p><label>대화 상대 닉네임(쉼표로 구분)<input id="privateRecipients" placeholder="예: 별빛용사, 달빛기사"></label><div id="privateMessages" class="log">비밀 채팅은 서버 연결 후 사용할 수 있어.</div><div class="actions"><input id="privateMessageInput" placeholder="선택한 상대에게 보낼 메시지" maxlength="300"><button onclick="sendPrivateMessage()">전송</button></div></div>
+  <div class="panel"><p class="small">안내: 현재 사이트는 정적 GitHub Pages라서 여러 사람에게 동시에 메시지를 전달하거나 보스의 공동 체력·기여도를 공유할 수 없어. 실제 실시간 기능에는 계정 식별, 메시지 저장, 보스 상태 동기화 및 보상 지급을 처리하는 백엔드 서버가 필요해.</p></div>
+</section>
 <section id="ranking" class="grid hidden"><div class="panel"><h2>🏆 서버 전체 랭킹</h2><button onclick="loadRanking()">랭킹 새로고침</button><div id="rankingTable" style="margin-top:12px" class="small">온라인 서버에 접속한 뒤 불러올 수 있어.</div></div></section>
-<footer>분신 키우기 · 수동 저장을 눌러 진행 상황을 보관하세요.</footer>
+<footer>분신 키우기 · 진행 상황은 브라우저에 자동 저장돼.</footer>
 </main>
 
 <script>
@@ -185,6 +203,13 @@ let game={money:500,gems:5,heroes:[],selectedHeroId:null,wins:0,losses:0,invento
 let apiBase='http://localhost:3000',pollTimer=null;
 let allGear=null,catalogRendered=false,gearPage=0;
 const GEAR_PAGE_SIZE=100;
+
+
+const BOSS_NAMES=['고대의 화염룡','심연의 해신','천공의 거신','망각의 수호자','칠흑의 늑대왕','시간의 파수꾼','별을 삼키는 자','영원의 골렘','폭풍의 군주','황혼의 여왕','태초의 정령','심판의 기계신','빙하의 제왕','독안개 군주','차원의 포식자','무한의 그림자','태양의 수호룡','달의 마녀왕','혼돈의 군주','창세의 용'];
+function bossWindowInfo(){const now=new Date(),local=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Seoul'}));const h=local.getHours();let end=new Date(local);if(h<10){end.setHours(10,0,0,0)}else if(h<22){end.setHours(22,0,0,0)}else{end.setDate(end.getDate()+1);end.setHours(10,0,0,0)}return {label:h>=10&&h<22?'오전 10시~오후 10시':'오후 10시~다음 날 오전 10시',remaining:Math.max(0,end-local)}}
+function renderBossPreview(){const info=bossWindowInfo();$('bossCycle').textContent=info.label;$('bossCountdown').textContent=new Date(info.remaining).toISOString().slice(11,19);$('bossCards').innerHTML=[0,1,2].map((n)=>{const idx=(Math.floor((Date.now()-3600000)/43200000)*3+n)%BOSS_NAMES.length;return `<div class="unit"><div class="emoji">🐉</div><b>${BOSS_NAMES[idx]}</b><p class="small">월드 보스 · 공동 전투 대기</p><p class="small">공유 체력과 입장 기능은 서버 연결 후 활성화</p><button class="secondary" disabled>보스 선택 및 입장 (서버 필요)</button></div>`}).join('')}
+async function sendPublicMessage(){const msg=$('publicMessageInput').value.trim();if(!msg)return;alert('실시간 공용 채팅 서버가 아직 연결되지 않았어. 메시지를 전송하지 않았어.');}
+async function sendPrivateMessage(){const names=$('privateRecipients').value.split(',').map(x=>x.trim()).filter(Boolean),msg=$('privateMessageInput').value.trim();if(!names.length)return alert('대화할 닉네임을 입력해 줘.');if(!msg)return;alert('실시간 비밀 채팅 서버가 아직 연결되지 않았어. 메시지를 전송하지 않았어.');}
 
 function big(v){try{return BigInt(v??0)}catch{return 0n}}
 function clampStat(v){v=big(v);return v<0n?0n:(v>MAX_VALUE?MAX_VALUE:v)}
@@ -234,8 +259,46 @@ function gearStats(hero){
   return s;
 }
 function safeText(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function saveLocal(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(game));alert('저장 완료! 이 브라우저에 현재 분신과 장비가 저장됐어.')}catch(e){alert('저장에 실패했어. 브라우저 저장 공간을 확인해 줘.')}}
-function loadLocal(){let raw=localStorage.getItem(SAVE_KEY);if(!raw){alert('저장 데이터가 없어.');return}try{let d=JSON.parse(raw);if(!Array.isArray(d.heroes))throw new Error('old save');game=d;render();alert('저장 데이터를 불러왔어!')}catch(e){alert('이전 버전의 저장 데이터와 호환되지 않거나 데이터가 손상됐어. 새 버전에서 새로 시작해 줘.')}}
+function serialiseGame(){
+  // BigInt 값이 추가되더라도 저장이 실패하지 않도록 문자열로 변환한다.
+  return JSON.stringify(game,(_key,value)=>typeof value==='bigint'?value.toString():value);
+}
+function persistGame(){
+  try{localStorage.setItem(SAVE_KEY,serialiseGame());return true}
+  catch(e){console.warn('자동 저장 실패:',e);return false}
+}
+function normaliseGame(data){
+  if(!data||typeof data!=='object'||!Array.isArray(data.heroes))throw new Error('invalid save');
+  const base={money:500,gems:5,heroes:[],selectedHeroId:null,wins:0,losses:0,inventory:[],playerId:null,onlineWins:0};
+  const restored={...base,...data};
+  restored.heroes=restored.heroes.slice(0,15).map(h=>({
+    ...h,
+    stats:{...newStats(Number(h.rank)||15),...(h.stats||{})},
+    equipped:{weapon:null,armor:null,helmet:null,gloves:null,boots:null,...(h.equipped||{})}
+  }));
+  restored.inventory=Array.isArray(restored.inventory)?restored.inventory:[];
+  restored.money=Math.max(0,Number(restored.money)||0);
+  restored.gems=Math.max(0,Number(restored.gems)||0);
+  restored.wins=Math.max(0,Number(restored.wins)||0);
+  restored.losses=Math.max(0,Number(restored.losses)||0);
+  restored.onlineWins=Math.max(0,Number(restored.onlineWins)||0);
+  if(!restored.heroes.some(h=>h.id===restored.selectedHeroId))restored.selectedHeroId=restored.heroes[0]?.id||null;
+  return restored;
+}
+function loadLocal(silent=false){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY);
+    if(!raw){if(!silent)alert('저장 데이터가 없어. 먼저 수동 저장을 해 줘.');return false}
+    const data=normaliseGame(JSON.parse(raw));
+    game=data;render();persistGame();
+    if(!silent)alert('저장 데이터를 불러왔어!');
+    return true;
+  }catch(e){console.error('불러오기 실패:',e);if(!silent)alert('저장 데이터를 읽지 못했어. 저장 데이터가 손상됐는지 확인해 줘.');return false}
+}
+function saveLocal(){
+  if(persistGame())alert('저장 완료! 새로고침해도 진행 상황이 유지돼.');
+  else alert('저장에 실패했어. 브라우저의 사이트 데이터 저장이 허용되어 있는지 확인해 줘.');
+}
 function tab(id){document.querySelectorAll('main section').forEach(x=>x.classList.toggle('hidden',x.id!==id));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));render();if(id==='gear'&&!catalogRendered)renderGearCatalog()}
 function render(){
   $('money').textContent=fmtMoney(game.money);$('gems').textContent=fmtMoney(game.gems);$('heroCount').textContent=`${game.heroes.length} / 15`;
@@ -270,6 +333,7 @@ function render(){
   $('rankOdds').innerHTML=rankOddsHtml();
   $('inventoryCount').textContent=game.inventory.length+'개';
   if(catalogRendered) updateCatalogCount();
+  persistGame();
 }
 function grow(key,cost){
   let h=activeHero();if(!h)return;
@@ -283,7 +347,10 @@ function createCatalog(){
   for(let si=0;si<SLOTS.length;si++)for(let p=0;p<PREFIXES.length;p++)for(let m=0;m<MATERIALS.length;m++)for(let b=0;b<BASES.length;b++)for(let sf=0;sf<SUFFIXES.length;sf++){
     const slot=SLOTS[si],seed=si*100000+p*10000+m*1000+b*100+sf*7;
     // 목록의 위에서 아래로 등급과 성능이 함께 올라간다.
-    const grade=Math.min(15,Math.floor((id-1)/Math.ceil(50000/15))+1),quality=grade;
+    const slotIndex=Math.floor((id-1)/10000);
+    const withinSlot=(id-1)%10000;
+    // 각 부위(10,000종)마다 1~15등급을 거의 동일한 수량으로 배분. 1등급이 최고, 15등급이 최저.
+    const grade=15-Math.floor(withinSlot*15/10000),quality=16-grade;
     const names=[PREFIXES[p],MATERIALS[m],BASES[b],slot[1],SUFFIXES[sf]];
     const stats={};const namesForSlot=SLOT_STATS[slot[0]];
     for(let j=0;j<2;j++){let k=namesForSlot[(seed+j*3)%namesForSlot.length];stats[k]=(stats[k]||0)+quality*quality*(j===0?2:1)+(seed%9)}
@@ -428,8 +495,12 @@ async function loadRanking(){
   catch(e){$('rankingTable').textContent='온라인 PvP 서버가 아직 연결되지 않았어. GitHub Pages는 화면 파일만 실행하므로 별도 온라인 서버를 배포해야 랭킹을 사용할 수 있어.'}
 }
 $('rankOdds').innerHTML=rankOddsHtml();
+loadLocal(true);
 render();
+window.addEventListener('pagehide',persistGame);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistGame()});
 updateStageGuide();
+renderBossPreview();setInterval(renderBossPreview,1000);
 </script>
 </body>
 </html>
