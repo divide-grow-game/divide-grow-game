@@ -1,81 +1,244 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+
+const express = require("express");
+const Database = require("better-sqlite3");
+const http = require("http");
+const cors = require("cors");
+const { Server } = require("socket.io");
+
 const app = express();
-app.use(express.json({limit:'100kb'}));
-app.get('/',(req,res)=>res.sendFile(path.join(__dirname,'index.html')));
-app.use(express.static(__dirname));
-const dbFile=path.join(__dirname,'players.json');
-let players={}, waiting=[], matches={};
-try{players=JSON.parse(fs.readFileSync(dbFile,'utf8'))}catch{}
-function save(){fs.writeFileSync(dbFile,JSON.stringify(players,null,2))}
-function clean(s){return String(s||'모험가').trim().slice(0,16).replace(/[<>]/g,'')}
-function safePower(v){const s=String(v??'0').replace(/[^\d]/g,'').slice(0,60)||'0';return s.replace(/^0+(?=\d)/,'')}
-function updatePlayer(req){
- const id=String(req.body.id||'').slice(0,80);
- if(!players[id])return null;
- players[id].heroName=clean(req.body.heroName||players[id].heroName);
- players[id].rank=Math.max(1,Math.min(15,Number(req.body.rank)||players[id].rank||15));
- players[id].power=safePower(req.body.power??players[id].power);
- players[id].lastSeen=Date.now();
- return players[id];
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*" }
+});
+
+app.use(cors());
+app.use(express.json());
+
+const db = new Database("game.db");
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS players (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    heroName TEXT,
+    rank INTEGER,
+    power TEXT,
+    wins INTEGER DEFAULT 0
+  )
+`);
+
+const players = new Map(
+  db.prepare("SELECT * FROM players")
+    .all()
+    .map(player => [player.id, player])
+);
+const queue = [];
+const matches = new Map();
+
+app.get("/", (req, res) => {
+  res.send("분신 키우기 서버 실행 중!");
+});
+
+// 플레이어 등록
+app.post("/api/register", (req, res) => {
+  const { id, name, heroName, rank, power } = req.body;
+
+  if (!id || !name) {
+    return res.status(400).json({ error: "정보가 부족해." });
+  }
+
+  const old = players.get(id);
+
+  const player = {
+    id,
+    name: String(name).slice(0, 16),
+    heroName: String(heroName || "").slice(0, 14),
+    rank: Number(rank) || 15,
+    power: String(power || "0"),
+    wins: old ? old.wins : 0
+  };
+
+  players.set(id, player);
+
+  db.prepare(`
+    INSERT INTO players (id, name, heroName, rank, power, wins)
+    VALUES (@id, @name, @heroName, @rank, @power, @wins)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      heroName = excluded.heroName,
+      rank = excluded.rank,
+      power = excluded.power
+  `).run(player);
+
+ res.json({ success: true });
+});
+
+// 랜덤 대전 대기
+app.post("/api/queue", (req, res) => {
+  const { id } = req.body;
+  const player = players.get(id);
+
+  if (!player) {
+    return res.status(404).json({ error: "먼저 서버에 접속해 줘." });
+  }
+
+  if (queue.includes(id)) {
+    return res.json({ success: true, matched: false });
+  }
+
+  const index = queue.findIndex(x => x !== id);
+
+  if (index === -1) {
+    queue.push(id);
+    return res.json({ success: true, matched: false });
+  }
+
+  const opponentId = queue.splice(index, 1)[0];
+  const opponent = players.get(opponentId);
+
+  if (!opponent) {
+    queue.push(id);
+    return res.json({ success: true, matched: false });
+  }
+
+  const a = BigInt(player.power);
+  const b = BigInt(opponent.power);
+  const win = a >= b;
+
+ if (win) {
+  player.wins++;
+
+  db.prepare(`
+    UPDATE players
+    SET wins = ?
+    WHERE id = ?
+  `).run(player.wins, player.id);
+
+} else {
+  opponent.wins++;
+
+  db.prepare(`
+    UPDATE players
+    SET wins = ?
+    WHERE id = ?
+  `).run(opponent.wins, opponent.id);
 }
-function duel(id,opponentId){
- const a=players[id],b=players[opponentId];
- const aPower=BigInt(a.power||'0'),bPower=BigInt(b.power||'0');
- const aScore=aPower*BigInt(90+Math.floor(Math.random()*21));
- const bScore=bPower*BigInt(90+Math.floor(Math.random()*21));
- const aWin=aScore>=bScore,reward=50;
- const summary=`${a.heroName} (전투력 ${a.power}) vs ${b.heroName} (전투력 ${b.power})`;
- matches[id]={result:aWin?'win':'loss',opponent:{name:b.name,heroName:b.heroName,rank:b.rank,power:b.power},summary,reward:aWin?reward:0};
- matches[opponentId]={result:aWin?'loss':'win',opponent:{name:a.name,heroName:a.heroName,rank:a.rank,power:a.power},summary,reward:aWin?0:reward};
- if(aWin){a.wins=(a.wins||0)+1;b.losses=(b.losses||0)+1}
- else{b.wins=(b.wins||0)+1;a.losses=(a.losses||0)+1}
- save();
-}
-app.post('/api/register',(req,res)=>{
- const id=String(req.body.id||crypto.randomUUID()).slice(0,80);
- const old=players[id]||{wins:0,losses:0};
- players[id]={...old,id,name:clean(req.body.name),heroName:clean(req.body.heroName),
-   rank:Math.max(1,Math.min(15,Number(req.body.rank)||15)),
-   power:safePower(req.body.power),updated:Date.now(),lastSeen:Date.now()};
- save();res.json({id});
+
+  matches.set(id, {
+    opponent,
+    result: win ? "win" : "lose",
+    reward: win ? 100 : 0,
+    summary: "전투력 비교로 결정된 테스트 대전이야."
+  });
+
+  matches.set(opponentId, {
+    opponent: player,
+    result: win ? "lose" : "win",
+    reward: win ? 0 : 100,
+    summary: "전투력 비교로 결정된 테스트 대전이야."
+  });
+
+  res.json({ success: true, matched: true });
 });
-app.post('/api/queue',(req,res)=>{
- const id=String(req.body.id||'');if(!players[id])return res.status(400).json({error:'먼저 서버에 접속해 주세요.'});
- updatePlayer(req);
- waiting=waiting.filter(x=>x!==id);
- const opponentId=waiting.find(x=>x!==id&&players[x]&&Date.now()-(players[x].lastSeen||0)<60000);
- if(opponentId){waiting=waiting.filter(x=>x!==opponentId);duel(id,opponentId)}
- else waiting.push(id);
- res.json({queued:true});
+
+// 닉네임 대결
+app.post("/api/challenge", (req, res) => {
+  const { id, targetName } = req.body;
+  const player = players.get(id);
+
+  const opponent = [...players.values()].find(
+    p => p.name === targetName && p.id !== id
+  );
+
+  if (!player || !opponent) {
+    return res.status(404).json({
+      error: "상대 플레이어를 찾을 수 없어."
+    });
+  }
+
+  const win = BigInt(player.power) >= BigInt(opponent.power);
+
+  if (win) player.wins++;
+  else opponent.wins++;
+
+  matches.set(id, {
+    opponent,
+    result: win ? "win" : "lose",
+    reward: win ? 100 : 0,
+    summary: "전투력 비교로 결정된 테스트 대전이야."
+  });
+
+  matches.set(opponent.id, {
+    opponent: player,
+    result: win ? "lose" : "win",
+    reward: win ? 0 : 100,
+    summary: "전투력 비교로 결정된 테스트 대전이야."
+  });
+
+  res.json({ success: true, opponent });
 });
-app.post('/api/challenge',(req,res)=>{
- const id=String(req.body.id||'');
- if(!players[id])return res.status(400).json({error:'먼저 서버에 접속해 주세요.'});
- updatePlayer(req);
- const target=clean(req.body.targetName);
- if(!target)return res.status(400).json({error:'상대방 닉네임을 입력해 주세요.'});
- const opponentId=Object.keys(players).find(pid=>pid!==id&&players[pid].name.toLowerCase()===target.toLowerCase()&&Date.now()-(players[pid].lastSeen||0)<60000);
- if(!opponentId)return res.status(404).json({error:'해당 닉네임의 접속 중인 플레이어를 찾지 못했습니다. 상대방이 서버에 접속해 있는지 확인해 주세요.'});
- waiting=waiting.filter(x=>x!==id);
- duel(id,opponentId);
- res.json({ok:true,opponent:{name:players[opponentId].name}});
+
+// 대기 취소
+app.post("/api/cancel", (req, res) => {
+  const { id } = req.body;
+  const index = queue.indexOf(id);
+
+  if (index !== -1) queue.splice(index, 1);
+
+  res.json({ success: true });
 });
-app.post('/api/cancel',(req,res)=>{waiting=waiting.filter(x=>x!==String(req.body.id||''));res.json({ok:true})});
-app.get('/api/match/:id',(req,res)=>{
- const id=req.params.id;if(players[id])players[id].lastSeen=Date.now();
- const m=matches[id];if(m){delete matches[id];return res.json({match:m})}
- res.json({match:null});
+
+// 대전 결과
+app.get("/api/match/:id", (req, res) => {
+  const match = matches.get(req.params.id);
+
+  if (!match) return res.json({ match: null });
+
+  matches.delete(req.params.id);
+  res.json({ match });
 });
-app.get('/api/rankings',(req,res)=>{
- const list=Object.values(players).sort((a,b)=>{
-   const ap=BigInt(a.power||'0'),bp=BigInt(b.power||'0');
-   return ap===bp?(b.wins||0)-(a.wins||0):(ap>bp?-1:1);
- }).slice(0,100);
- res.json({players:list.map(p=>({name:p.name,heroName:p.heroName,rank:p.rank,power:p.power,wins:p.wins}))});
+
+// 랭킹
+app.get("/api/rankings", (req, res) => {
+  const ranking = [...players.values()]
+    .sort((a, b) => {
+      if (a.wins !== b.wins) return b.wins - a.wins;
+
+      const pa = BigInt(a.power);
+      const pb = BigInt(b.power);
+
+      if (pa > pb) return -1;
+      if (pa < pb) return 1;
+      return 0;
+    })
+    .slice(0, 100);
+
+  res.json({ players: ranking });
 });
-app.get('/api/health',(req,res)=>res.json({ok:true}));
-const port=process.env.PORT||3000;
-app.listen(port,'0.0.0.0',()=>console.log(`분신 키우기 server: http://localhost:${port}`));
+
+// 채팅
+io.on("connection", socket => {
+  console.log("플레이어 접속:", socket.id);
+
+  socket.on("chat", message => {
+    if (typeof message !== "string") return;
+
+    const safeMessage = message.trim().slice(0, 200);
+    if (!safeMessage) return;
+
+    io.emit("chat", {
+      player: "플레이어",
+      message: safeMessage
+    });
+  });
+
+  socket.on("disconnect", () => {
+    console.log("접속 종료:", socket.id);
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, () => {
+  console.log(`서버 실행 중: 포트 ${PORT}`);
+});

@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>분신 키우기</title>
+<style>
+:root{--bg:#101426;--panel:#202b4a;--line:#40517a;--txt:#f4f6ff;--muted:#b3bfdd;--gold:#ffda86;--green:#91e8b5;--red:#ffa1aa}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at top,#2b3b65,#101426 61%);color:var(--txt);font:15px/1.5 system-ui,"Malgun Gothic",sans-serif}
+header{text-align:center;padding:23px 12px;background:#10182ddd;border-bottom:1px solid var(--line)}
+h1{font-size:clamp(28px,5vw,40px);margin:0;letter-spacing:1px}
+header p{margin:5px 0 0;color:var(--muted)}
+main{max-width:1150px;margin:20px auto;padding:0 14px 40px}
+.top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
+.resources,.actions,.tabs{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pill,.tag{display:inline-block;padding:7px 11px;border:1px solid var(--line);border-radius:999px;background:#202d4d;font-size:13px}
+button{padding:10px 13px;border:1px solid #7589ba;border-radius:10px;background:linear-gradient(#526ba5,#304574);color:white;font-weight:700;cursor:pointer}
+button:hover{filter:brightness(1.13)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.secondary{background:#2a3757}.gold{background:linear-gradient(#9c783e,#674d2a);border-color:#d4b16d}
+.tab.active{background:linear-gradient(#6686c6,#3a548c);border-color:#a6c2ff}
+.tabs{margin:15px 0}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:13px}
+.panel{grid-column:span 12;background:linear-gradient(150deg,#222e50,#171f38);border:1px solid var(--line);border-radius:15px;padding:15px;box-shadow:0 10px 28px #0003}
+.half{grid-column:span 6}
+h2{font-size:19px;margin:0 0 11px}
+h3{font-size:15px;margin:13px 0 7px;color:#dce5ff}
+label{display:block;margin:8px 0;color:#d3dcf4;font-size:13px}
+input,select{width:100%;padding:10px;margin-top:4px;border:1px solid var(--line);border-radius:9px;background:#10182e;color:var(--txt)}
+.muted,.small{color:var(--muted)}.small{font-size:12px}
+.notice{padding:11px 13px;border-radius:10px;background:#2d2b46;border:1px solid #675e88;color:#e9e2ff;margin:12px 0}
+.stat{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed #3a496f}
+.stat:last-child{border:0}
+.hero{display:flex;gap:14px;align-items:center}
+.avatar{width:74px;height:74px;display:grid;place-items:center;flex-shrink:0;border-radius:18px;border:1px solid #8096cb;background:#30436f;font-size:42px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:9px}
+.unit{padding:11px;border:1px solid #3a4a70;border-radius:12px;background:#121b32}
+.unit .emoji{float:right;font-size:27px}
+.log{background:#0e162b;border:1px solid #35456e;border-radius:10px;padding:10px;min-height:110px;max-height:300px;overflow:auto;font-size:13px}
+.good{color:var(--green)}.bad{color:var(--red)}.goldtxt{color:var(--gold)}
+.hidden{display:none!important}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{text-align:left;padding:8px;border-bottom:1px solid #39496e}
+.rank1{color:#ffe68e}.rank2{color:#ffc5ff}.rank3{color:#a9d6ff}
+.gear-tools{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin:12px 0}
+.gear-list{height:650px;overflow:auto;border:1px solid #3b4a70;border-radius:12px;background:#0e162b;padding:7px}
+.gear-row{display:grid;grid-template-columns:minmax(0,1fr) 110px 125px;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid #2e3d60;font-size:13px}
+.gear-row:last-child{border-bottom:0}
+.grade-group-title{padding:9px 10px;margin-top:6px;background:#202e4e;color:#ffe68e;font-weight:800;border-radius:8px;border:1px solid #52658e}
+.gear-name{font-weight:700}.gear-meta{color:var(--muted);font-size:12px}
+.grade{display:inline-block;border-radius:6px;padding:2px 7px;background:#2e3a5a;border:1px solid #586a97;font-size:11px;white-space:nowrap}
+.grade-1,.grade-2{color:#ffe58e}.grade-3,.grade-4{color:#f3baff}.grade-5,.grade-6,.grade-7{color:#9bd1ff}
+.gear-buy{padding:7px 9px;font-size:12px;white-space:nowrap}
+.gear-pagination{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 4px;position:sticky;bottom:0;background:#0e162b;border-top:1px solid #3b4a70}
+.gear-pagination button{padding:7px 12px}.gear-page-label{font-size:12px;color:var(--muted);min-width:105px;text-align:center}
+footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
+@media(max-width:720px){.half{grid-column:span 12}.hero{align-items:flex-start}.gear-tools{grid-template-columns:1fr}.gear-row{grid-template-columns:minmax(0,1fr) auto;}.gear-row button{grid-column:2;grid-row:1/3}.gear-list{height:560px}}
+</style>
+</head>
+<body>
+<header><h1>🪞 분신 키우기</h1><p>나의 분신을 만들고, 성장시키고, 끝없이 전투에 도전하자!</p></header>
+<main>
+<div class="top">
+  <div class="resources">
+    <span class="pill">🪙 골드 <b id="money">0</b></span>
+    <span class="pill">💠 보석 <b id="gems">0</b></span>
+    <span class="pill">🪞 분신 <b id="heroCount">0 / 15</b></span>
+    <span class="pill">🌐 <b id="netState">오프라인</b></span>
+  </div>
+  <div class="actions"><button class="gold" onclick="saveLocal()">💾 수동 저장</button><button class="secondary" onclick="loadLocal()">불러오기</button></div>
+</div>
+<div class="notice">분신은 최대 15개까지 만들 수 있어. 기본 전투력은 12개 기본 능력치로 계산하며, 기본 전투력의 최대값은 99999999999999999999999999999999999999999이야. 장비로 얻는 추가 전투력은 별도로 더해져 이 상한을 넘어갈 수 있어.</div>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="create" onclick="tab('create')">🪞 분신 생성</button>
+  <button class="tab" data-tab="home" onclick="tab('home')">내 분신</button>
+  <button class="tab" data-tab="growth" onclick="tab('growth')">🌱 성장</button>
+  <button class="tab" data-tab="gear" onclick="tab('gear')">🎒 장비 전체 목록</button>
+  <button class="tab" data-tab="battle" onclick="tab('battle')">⚔️ 전투</button>
+  <button class="tab" data-tab="pvp" onclick="tab('pvp')">🌐 온라인 PvP</button>
+  <button class="tab" data-tab="ranking" onclick="tab('ranking')">🏆 랭킹</button>
+  <button class="tab" data-tab="boss" onclick="tab('boss')">🐉 보스전</button>
+  <button class="tab" data-tab="chat" onclick="tab('chat')">💬 채팅</button>
+</nav>
+
+<section id="create" class="grid">
+  <div class="panel half">
+    <h2>🪞 나만의 분신 만들기</h2>
+    <p class="muted">이름과 외형을 정하면 등급과 기본 능력치가 무작위로 결정돼.</p>
+    <label>분신 이름<input id="heroName" maxlength="14" placeholder="예: 또 다른 나"></label>
+    <label>외형<select id="heroIcon"><option>🧑</option><option>🧙</option><option>🦊</option><option>🐺</option><option>🤖</option><option>🧚</option><option>🧝</option><option>🐉</option><option>👻</option><option>🌟</option><option>🦁</option><option>🐸</option></select></label>
+    <button class="gold" id="createButton" onclick="createHero()">분신 생성하기</button>
+    <p class="small" id="createCount">현재 0 / 15개 생성</p>
+  </div>
+  <div class="panel half"><h2>분신 등급 확률</h2><p class="small">1등급이 가장 좋고 15등급이 가장 낮아. 좋은 등급일수록 확률이 낮아.</p><div id="rankOdds"></div></div>
+  <div class="panel"><h2>내 분신 목록</h2><div id="createdHeroes" class="cards"></div></div>
+</section>
+
+<section id="home" class="grid hidden">
+  <div class="panel half"><h2>선택한 분신</h2><div id="heroCard"></div><label>대표 분신 선택<select id="heroSelect" onchange="selectHero(this.value)"></select></label></div>
+  <div class="panel half"><h2>전투력</h2><div id="combatPower" style="font-size:23px;font-weight:800;color:var(--gold);overflow-wrap:anywhere">0</div><p class="small">기본 능력치 전투력 + 장착 장비의 추가 전투력</p><div id="powerBreakdown"></div><div id="heroQuick"></div></div>
+  <div class="panel"><h2>12개 기본 능력치</h2><div id="heroStats"></div><p class="small">기본 능력치는 각각 최대값까지 성장해. 장비 보너스는 기본 능력치와 별도로 전투력에 추가돼.</p></div>
+  <div class="panel"><h2>계정 기록</h2><div id="progress"></div></div>
+</section>
+
+<section id="growth" class="grid hidden">
+  <div class="panel"><h2>🌱 12분야 성장</h2><p class="muted">선택한 분신의 기본 능력치를 성장시켜. 성장할수록 비용과 증가량이 함께 커져.</p><div id="growthCards" class="cards"></div></div>
+</section>
+
+<section id="gear" class="grid hidden">
+  <div class="panel">
+    <h2>🎒 장비 전체 목록</h2>
+    <p class="muted">장비 50,000종을 등급별로 모아 표시해. 같은 등급의 장비는 한곳에 모이며, 100개씩 페이지를 나누어 보여 줘.</p>
+    <div class="stat"><span>전체 장비 종류</span><b id="catalogCount">50,000종</b></div>
+    <div class="stat"><span>보유 장비</span><b id="inventoryCount">0개</b></div>
+    <div class="gear-tools">
+      <input id="gearSearch" placeholder="장비 이름 검색" oninput="renderGearCatalog(true)">
+      <select id="gearFilter" onchange="renderGearCatalog(true)"><option value="all">모든 장비 부위</option><option value="weapon">무기</option><option value="armor">갑옷</option><option value="helmet">투구</option><option value="gloves">장갑</option><option value="boots">신발</option></select>
+    </div>
+    <div id="gearList" class="gear-list"><p class="small">장비 목록을 불러오는 중...</p></div>
+  </div>
+  <div class="panel half"><h2>선택 분신 장착 장비</h2><div id="equipped"></div></div>
+  <div class="panel half"><h2>보유 장비</h2><div id="inventory" class="cards"></div></div>
+</section>
+
+<section id="battle" class="grid hidden">
+  <div class="panel half">
+    <h2>⚔️ 전투 단계 선택</h2>
+    <p class="muted">1단계부터 10,000,000단계까지 원하는 곳에 바로 도전할 수 있어. 이전 단계를 클리어할 필요가 없어.</p>
+    <label>도전할 단계<input id="battleStage" type="number" min="1" max="10000000" step="1" value="1" oninput="updateStageGuide()"></label>
+    <div class="stat"><span>적정 전투력</span><b id="stagePowerGuide">1단계 (적정 전투력 1~10)</b></div>
+    <button class="gold" onclick="startBattle()">자동 전투 시작</button>
+    <p class="small">승리하면 단계에 비례해 골드를 얻고, 패배하면 단계에 비례해 골드를 잃어. 보유 골드보다 많이 잃지는 않아.</p>
+  </div>
+  <div class="panel half"><h2>전투 기록</h2><div id="battleLog" class="log">전투를 시작하면 결과가 표시돼.</div></div>
+</section>
+
+<section id="pvp" class="grid hidden">
+  <div class="panel half">
+    <h2>🌐 온라인 자동 PvP</h2><p class="muted">같은 서버에 접속한 다른 플레이어와 자동 대전을 진행해.</p>
+    <label>서버 주소<input id="serverUrl" value="" placeholder="배포된 서버 주소 입력 (예: https://서버주소)"></label>
+    <label>온라인 닉네임<input id="onlineName" maxlength="16" placeholder="게임 닉네임"></label>
+    <div class="actions"><button onclick="connectServer()">서버 접속</button><button class="secondary" onclick="findOpponent()">🎲 랜덤 상대 찾기</button><button class="secondary" onclick="cancelQueue()">대기 취소</button></div>
+    <label>대결할 플레이어 닉네임<input id="targetPlayer" maxlength="16" placeholder="상대방의 온라인 닉네임"></label>
+    <button class="gold" onclick="challengePlayer()">이 플레이어에게 대결 신청</button>
+    <p id="queueText" class="small">서버에 접속한 뒤 닉네임으로 대결하거나 랜덤 상대를 찾을 수 있어.</p>
+  </div>
+  <div class="panel half"><h2>온라인 대전 결과</h2><div id="pvpLog" class="log">온라인 대전 기록이 없어.</div></div>
+</section>
+
+<section id="boss" class="grid hidden">
+  <div class="panel"><h2>🐉 월드 보스 토벌</h2>
+    <p class="muted">매일 오전 10시~오후 10시, 오후 10시~다음 날 오전 10시 주기로 보스가 교체돼. 한 주기마다 보스 3종이 등장하며 원하는 보스를 선택할 수 있어.</p>
+    <div class="stat"><span>현재 토벌 주기</span><b id="bossCycle">시간 확인 중...</b></div>
+    <div class="stat"><span>다음 갱신까지</span><b id="bossCountdown">--:--:--</b></div>
+    <p class="small" id="bossOnlineStatus">공용 보스전은 모든 플레이어가 같은 보스 체력과 기여도를 공유하는 서버가 필요해. 현재 GitHub Pages 단독 모드에서는 실제 공동 전투가 시작되지 않아.</p>
+    <div id="bossCards" class="cards"></div>
+  </div>
+  <div class="panel"><h2>📊 내 보스 기여도</h2><div id="bossContribution">온라인 보스 서버 연결 후 피해량과 예상 보상을 표시해.</div></div>
+  <div class="panel"><h2>🎁 보상 규칙</h2><p>보스를 제한 시간 안에 처치하면 누적 피해 기여도에 비례해 골드와 무작위 성장 보상을 지급해. 토벌 실패 시 보상은 없지만 골드나 능력치 손실은 없어.</p><p>전투 중 나가거나 재접속해도 서버에 기록된 기여도는 유지되고, 오프라인 상태에서 토벌이 성공해도 보상은 계정에 자동 지급돼.</p></div>
+</section>
+<section id="chat" class="grid hidden">
+  <div class="panel"><h2>💬 공용 채팅</h2><p class="muted">온라인에 접속한 모든 플레이어가 함께 대화하는 채팅이야.</p><div id="publicMessages" class="log">실시간 공용 채팅은 채팅 서버 연결 후 사용할 수 있어.</div><div class="actions"><input id="publicMessageInput" placeholder="모두에게 보낼 메시지" maxlength="300"><button onclick="sendPublicMessage()">전송</button></div></div>
+  <div class="panel"><h2>🔒 비밀 채팅</h2><p class="muted">닉네임을 지정한 플레이어들만 참여하는 대화방이야.</p><label>대화 상대 닉네임(쉼표로 구분)<input id="privateRecipients" placeholder="예: 별빛용사, 달빛기사"></label><div id="privateMessages" class="log">비밀 채팅은 서버 연결 후 사용할 수 있어.</div><div class="actions"><input id="privateMessageInput" placeholder="선택한 상대에게 보낼 메시지" maxlength="300"><button onclick="sendPrivateMessage()">전송</button></div></div>
+  <div class="panel"><p class="small">안내: 현재 사이트는 정적 GitHub Pages라서 여러 사람에게 동시에 메시지를 전달하거나 보스의 공동 체력·기여도를 공유할 수 없어. 실제 실시간 기능에는 계정 식별, 메시지 저장, 보스 상태 동기화 및 보상 지급을 처리하는 백엔드 서버가 필요해.</p></div>
+</section>
+<section id="ranking" class="grid hidden"><div class="panel"><h2>🏆 서버 전체 랭킹</h2><button onclick="loadRanking()">랭킹 새로고침</button><div id="rankingTable" style="margin-top:12px" class="small">온라인 서버에 접속한 뒤 불러올 수 있어.</div></div></section>
+<footer>분신 키우기 · 진행 상황은 브라우저에 자동 저장돼.</footer>
+</main>
+
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const SAVE_KEY='divideGrowSaveV4';
+const MAX_VALUE=BigInt('99999999999999999999999999999999999999999');
+const RANK_WEIGHTS=[1,2,3,4,5,7,9,12,15,18,22,27,33,40,48];
+const RANK_NAMES=['초월','신화','전설','영웅','고대','유일','불멸','초희귀','희귀','상급','중급','일반','하급','최하급','초심'];
+const STAT_DEFS=[
+  ['hp','최대 체력','❤️','전투에서 버틸 수 있는 체력'],
+  ['atk','공격력','⚔️','적에게 주는 기본 피해'],
+  ['def','방어력','🛡️','받는 피해를 줄이는 능력'],
+  ['spd','속도','💨','전투에서 행동 순서에 영향'],
+  ['crit','치명타 확률','💥','강력한 공격이 나올 확률'],
+  ['critDmg','치명타 피해','✨','치명타 공격의 추가 피해'],
+  ['acc','명중률','🎯','공격이 적중할 확률'],
+  ['evade','회피율','🌫️','적의 공격을 피할 확률'],
+  ['pen','관통력','🗡️','적 방어력을 무시하는 능력'],
+  ['life','흡혈','🩸','입힌 피해 일부를 체력으로 회복'],
+  ['regen','재생력','🌿','전투 중 체력을 회복하는 능력'],
+  ['luck','행운','🍀','장비 획득과 보상에 영향']
+];
+const SLOTS=[['weapon','무기','⚔️'],['armor','갑옷','🛡️'],['helmet','투구','⛑️'],['gloves','장갑','🧤'],['boots','신발','👢']];
+const PREFIXES=['초보의','바람깃든','불꽃의','서리빛','번개의','달빛','별가루','심연의','고대의','찬란한'];
+const MATERIALS=['나무','구리','철','강철','은','금','수정','흑요석','운석','별빛'];
+const BASES=['수련용','여행자의','수호자의','정찰자의','현자의','용사의','군주의','정령의','차원의','영원의'];
+const SUFFIXES=['조각','파편','유산','인장','결정','각인','잔영','비전','메아리','핵'];
+const SLOT_STATS={
+ weapon:['atk','critDmg','pen'],armor:['def','hp','regen'],helmet:['hp','acc','luck'],
+ gloves:['atk','spd','crit'],boots:['spd','evade','luck']
+};
+let game={money:500,gems:5,heroes:[],selectedHeroId:null,wins:0,losses:0,inventory:[],playerId:null,onlineWins:0};
+let apiBase='http://localhost:3000',pollTimer=null;
+let allGear=null,catalogRendered=false,gearPage=0;
+const GEAR_PAGE_SIZE=100;
+
+
+const BOSS_NAMES=['고대의 화염룡','심연의 해신','천공의 거신','망각의 수호자','칠흑의 늑대왕','시간의 파수꾼','별을 삼키는 자','영원의 골렘','폭풍의 군주','황혼의 여왕','태초의 정령','심판의 기계신','빙하의 제왕','독안개 군주','차원의 포식자','무한의 그림자','태양의 수호룡','달의 마녀왕','혼돈의 군주','창세의 용'];
+function bossWindowInfo(){const now=new Date(),local=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Seoul'}));const h=local.getHours();let end=new Date(local);if(h<10){end.setHours(10,0,0,0)}else if(h<22){end.setHours(22,0,0,0)}else{end.setDate(end.getDate()+1);end.setHours(10,0,0,0)}return {label:h>=10&&h<22?'오전 10시~오후 10시':'오후 10시~다음 날 오전 10시',remaining:Math.max(0,end-local)}}
+function renderBossPreview(){const info=bossWindowInfo();$('bossCycle').textContent=info.label;$('bossCountdown').textContent=new Date(info.remaining).toISOString().slice(11,19);$('bossCards').innerHTML=[0,1,2].map((n)=>{const idx=(Math.floor((Date.now()-3600000)/43200000)*3+n)%BOSS_NAMES.length;return `<div class="unit"><div class="emoji">🐉</div><b>${BOSS_NAMES[idx]}</b><p class="small">월드 보스 · 공동 전투 대기</p><p class="small">공유 체력과 입장 기능은 서버 연결 후 활성화</p><button class="secondary" disabled>보스 선택 및 입장 (서버 필요)</button></div>`}).join('')}
+async function sendPublicMessage(){const msg=$('publicMessageInput').value.trim();if(!msg)return;alert('실시간 공용 채팅 서버가 아직 연결되지 않았어. 메시지를 전송하지 않았어.');}
+async function sendPrivateMessage(){const names=$('privateRecipients').value.split(',').map(x=>x.trim()).filter(Boolean),msg=$('privateMessageInput').value.trim();if(!names.length)return alert('대화할 닉네임을 입력해 줘.');if(!msg)return;alert('실시간 비밀 채팅 서버가 아직 연결되지 않았어. 메시지를 전송하지 않았어.');}
+
+function big(v){try{return BigInt(v??0)}catch{return 0n}}
+function clampStat(v){v=big(v);return v<0n?0n:(v>MAX_VALUE?MAX_VALUE:v)}
+function fmt(v){return clampStat(v).toLocaleString('en-US')}
+function fmtMoney(v){return Math.max(0,Math.floor(Number(v)||0)).toLocaleString('en-US')}
+function activeHero(){return game.heroes.find(h=>h.id===game.selectedHeroId)||game.heroes[0]||null}
+function rollRank(){let total=RANK_WEIGHTS.reduce((a,b)=>a+b,0),n=Math.random()*total;for(let i=0;i<RANK_WEIGHTS.length;i++){n-=RANK_WEIGHTS[i];if(n<0)return i+1}return 15}
+function rankOddsHtml(){let total=RANK_WEIGHTS.reduce((a,b)=>a+b,0);return RANK_WEIGHTS.map((w,i)=>`<div class="stat"><span>${i+1}등급 · ${RANK_NAMES[i]}</span><b class="${i<3?'rank'+(i+1):''}">${(w/total*100).toFixed(2)}%</b></div>`).join('')}
+function newStats(rank){
+  let f=BigInt(16-rank);
+  return {hp:String(100n+f*25n),atk:String(15n+f*5n),def:String(8n+f*3n),spd:String(10n+f*2n),
+    crit:String(3n+f),critDmg:String(50n+f*5n),acc:String(80n+f),evade:String(3n+f),
+    pen:String(2n+f),life:String(f),regen:String(f),luck:String(5n+f*2n)};
+}
+function createHero(){
+  if(game.heroes.length>=15){alert('분신은 최대 15개까지 만들 수 있어.');return}
+  let name=$('heroName').value.trim();if(!name){alert('분신 이름을 입력해 줘.');return}
+  let rank=rollRank(),hero={id:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random()),name,icon:$('heroIcon').value,rank,stats:newStats(rank),equipped:{weapon:null,armor:null,helmet:null,gloves:null,boots:null}};
+  game.heroes.push(hero);game.selectedHeroId=hero.id;$('heroName').value='';render();tab('home');
+}
+function selectHero(id){game.selectedHeroId=id;render()}
+function basePower(hero){
+  if(!hero)return 0n;
+  // 12개 기본 능력치가 모두 전투력에 반영된다.
+  // 12개 능력치가 모두 최대일 때 전투력도 최대값에 도달한다.
+  let total=0n;
+  for(const [k] of STAT_DEFS) total+=clampStat(hero.stats[k]);
+  return total/BigInt(STAT_DEFS.length);
+}
+function equipmentPower(hero){
+  // 장착 장비의 능력치 보너스 합계는 기본 능력치/전투력 상한과 별도로 더한다.
+  let total=0n;
+  for(const item of Object.values(hero?.equipped||{})){
+    if(!item)continue;
+    for(const value of Object.values(item.bonus||{})) total+=big(value);
+  }
+  // 전투력은 정수로 표시하므로 장비 보너스 합계를 12개 능력치 기준으로 올림한다.
+  return total===0n?0n:(total+BigInt(STAT_DEFS.length)-1n)/BigInt(STAT_DEFS.length);
+}
+function combatPower(hero){return basePower(hero)+equipmentPower(hero)}
+function fmtUncapped(v){return big(v).toLocaleString('en-US')}
+
+function gearStats(hero){
+  let s={};for(let [k] of STAT_DEFS)s[k]=clampStat(hero?.stats?.[k]||0);
+  // 장비 보너스는 기본 능력치 최대값과 별도로 적용되어 최대값을 초과할 수 있다.
+  for(let item of Object.values(hero?.equipped||{}))if(item)for(let [k,v] of Object.entries(item.bonus||{}))s[k]=s[k]+big(v);
+  return s;
+}
+function safeText(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function serialiseGame(){
+  // BigInt 값이 추가되더라도 저장이 실패하지 않도록 문자열로 변환한다.
+  return JSON.stringify(game,(_key,value)=>typeof value==='bigint'?value.toString():value);
+}
+function persistGame(){
+  try{localStorage.setItem(SAVE_KEY,serialiseGame());return true}
+  catch(e){console.warn('자동 저장 실패:',e);return false}
+}
+function normaliseGame(data){
+  if(!data||typeof data!=='object'||!Array.isArray(data.heroes))throw new Error('invalid save');
+  const base={money:500,gems:5,heroes:[],selectedHeroId:null,wins:0,losses:0,inventory:[],playerId:null,onlineWins:0};
+  const restored={...base,...data};
+  restored.heroes=restored.heroes.slice(0,15).map(h=>({
+    ...h,
+    stats:{...newStats(Number(h.rank)||15),...(h.stats||{})},
+    equipped:{weapon:null,armor:null,helmet:null,gloves:null,boots:null,...(h.equipped||{})}
+  }));
+  restored.inventory=Array.isArray(restored.inventory)?restored.inventory:[];
+  restored.money=Math.max(0,Number(restored.money)||0);
+  restored.gems=Math.max(0,Number(restored.gems)||0);
+  restored.wins=Math.max(0,Number(restored.wins)||0);
+  restored.losses=Math.max(0,Number(restored.losses)||0);
+  restored.onlineWins=Math.max(0,Number(restored.onlineWins)||0);
+  if(!restored.heroes.some(h=>h.id===restored.selectedHeroId))restored.selectedHeroId=restored.heroes[0]?.id||null;
+  return restored;
+}
+function loadLocal(silent=false){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY);
+    if(!raw){if(!silent)alert('저장 데이터가 없어. 먼저 수동 저장을 해 줘.');return false}
+    const data=normaliseGame(JSON.parse(raw));
+    game=data;render();persistGame();
+    if(!silent)alert('저장 데이터를 불러왔어!');
+    return true;
+  }catch(e){console.error('불러오기 실패:',e);if(!silent)alert('저장 데이터를 읽지 못했어. 저장 데이터가 손상됐는지 확인해 줘.');return false}
+}
+function saveLocal(){
+  if(persistGame())alert('저장 완료! 새로고침해도 진행 상황이 유지돼.');
+  else alert('저장에 실패했어. 브라우저의 사이트 데이터 저장이 허용되어 있는지 확인해 줘.');
+}
+function tab(id){document.querySelectorAll('main section').forEach(x=>x.classList.toggle('hidden',x.id!==id));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));render();if(id==='gear'&&!catalogRendered)renderGearCatalog()}
+function render(){
+  $('money').textContent=fmtMoney(game.money);$('gems').textContent=fmtMoney(game.gems);$('heroCount').textContent=`${game.heroes.length} / 15`;
+  $('createCount').textContent=`현재 ${game.heroes.length} / 15개 생성`;
+  $('createButton').disabled=game.heroes.length>=15;
+  $('createdHeroes').innerHTML=game.heroes.length?game.heroes.map(h=>`<div class="unit"><span class="emoji">${h.icon}</span><b>${safeText(h.name)}</b><div class="small">${h.rank}등급 · ${RANK_NAMES[h.rank-1]}</div><div class="small">전투력 ${fmtUncapped(combatPower(h))}</div><button class="secondary" onclick="selectHero('${h.id}')">선택하기</button></div>`).join(''):'<p class="small">아직 분신이 없어. 먼저 직접 만들어 줘.</p>';
+  let h=activeHero();
+  if(!h){
+    $('heroCard').textContent='먼저 분신 생성 탭에서 분신을 만들어 줨.';
+    $('combatPower').textContent='—';$('powerBreakdown').innerHTML='';$('heroStats').textContent='분신 생성 후 능력치가 표시돼.';
+    $('heroQuick').textContent='';$('progress').textContent='아직 분신이 없어.';
+    $('growthCards').innerHTML='<p class="small">먼저 분신을 만들어 줘.</p>';
+    $('equipped').textContent='분신을 만든 뒤 장비를 장착할 수 있어.';
+    $('inventory').textContent='보유 장비가 없어.';
+  }else{
+    $('heroCard').innerHTML=`<div class="hero"><div class="avatar">${h.icon}</div><div><h2>${safeText(h.name)}</h2><b class="${h.rank<=3?'rank'+h.rank:'goldtxt'}">${h.rank}등급 · ${RANK_NAMES[h.rank-1]}</b><div class="small">기본 능력치와 장비 보너스 적용</div></div></div>`;
+    $('combatPower').textContent=fmtUncapped(combatPower(h));
+    $('powerBreakdown').innerHTML=`<div class="stat"><span>기본 전투력</span><b>${fmt(basePower(h))}</b></div><div class="stat"><span>장비 추가 전투력</span><b>+${fmtUncapped(equipmentPower(h))}</b></div>`;
+    $('heroQuick').innerHTML=`<div class="stat"><span>등급</span><b>${h.rank}등급</b></div><div class="stat"><span>분신 수</span><b>${game.heroes.length}/15</b></div>`;
+    $('heroStats').innerHTML=STAT_DEFS.map(([k,n,ico])=>`<div class="stat"><span>${ico} ${n}</span><b>${fmt(h.stats[k])}</b></div>`).join('');
+    $('progress').innerHTML=`<div class="stat"><span>전투 승리</span><b>${game.wins}</b></div><div class="stat"><span>전투 패배</span><b>${game.losses}</b></div><div class="stat"><span>온라인 PvP 승리</span><b>${game.onlineWins}</b></div><div class="stat"><span>보유 장비</span><b>${game.inventory.length}개</b></div>`;
+    $('heroSelect').innerHTML=game.heroes.map(x=>`<option value="${x.id}" ${x.id===h.id?'selected':''}>${safeText(x.name)} · ${x.rank}등급</option>`).join('');
+    $('growthCards').innerHTML=STAT_DEFS.map(([k,n,ico,desc])=>{
+      let current=big(h.stats[k]),gain=current/10n;if(gain<10n)gain=10n;
+      let next=clampStat(current+gain),digits=current.toString().length;
+      let cost=40+digits*8+Math.floor(Number(current%1000n)/100);
+      return `<div class="unit"><span class="emoji">${ico}</span><b>${n}</b><div class="small">${desc}</div><div class="stat"><span>현재 능력치</span><b>${fmt(current)}</b></div><div class="stat"><span>성장 후</span><b>${fmt(next)}</b></div><button onclick="grow('${k}',${cost})" ${current>=MAX_VALUE?'disabled':''}>성장 · ${fmtMoney(cost)}G</button></div>`;
+    }).join('');
+    $('equipped').innerHTML=SLOTS.map(([k,n,ico])=>{let g=h.equipped[k];return `<div class="stat"><span>${ico} ${n}</span><span>${g?safeText(g.name):'미장착'} ${g?`<button class="secondary" onclick="unequip('${k}')">해제</button>`:''}</span></div>`}).join('');
+    $('inventory').innerHTML=game.inventory.length?game.inventory.map(g=>`<div class="unit"><b>${g.icon} ${safeText(g.name)}</b><div class="small">${g.grade}등급 · ${g.slotName}</div><div class="small">${bonusText(g.bonus)}</div><button onclick="equipItem('${g.uid}')">장착</button></div>`).join(''):'<p class="small">보유 장비가 없어. 아래 전체 목록에서 구매해 봐.</p>';
+  }
+  $('rankOdds').innerHTML=rankOddsHtml();
+  $('inventoryCount').textContent=game.inventory.length+'개';
+  if(catalogRendered) updateCatalogCount();
+  persistGame();
+}
+function grow(key,cost){
+  let h=activeHero();if(!h)return;
+  if(big(h.stats[key])>=MAX_VALUE){alert('이 능력치는 최대값에 도달했어.');return}
+  if(game.money<cost){alert('골드가 부족해! 전투에서 승리해 골드를 모아 줘.');return}
+  game.money-=cost;let cur=big(h.stats[key]),gain=cur/10n;if(gain<10n)gain=10n;h.stats[key]=String(clampStat(cur+gain));render();
+}
+function createCatalog(){
+  if(allGear)return allGear;
+  const arr=[];let id=1;
+  for(let si=0;si<SLOTS.length;si++)for(let p=0;p<PREFIXES.length;p++)for(let m=0;m<MATERIALS.length;m++)for(let b=0;b<BASES.length;b++)for(let sf=0;sf<SUFFIXES.length;sf++){
+    const slot=SLOTS[si],seed=si*100000+p*10000+m*1000+b*100+sf*7;
+    // 목록의 위에서 아래로 등급과 성능이 함께 올라간다.
+    const slotIndex=Math.floor((id-1)/10000);
+    const withinSlot=(id-1)%10000;
+    // 각 부위(10,000종)마다 1~15등급을 거의 동일한 수량으로 배분. 1등급이 최고, 15등급이 최저.
+    const grade=15-Math.floor(withinSlot*15/10000),quality=16-grade;
+    const names=[PREFIXES[p],MATERIALS[m],BASES[b],slot[1],SUFFIXES[sf]];
+    const stats={};const namesForSlot=SLOT_STATS[slot[0]];
+    for(let j=0;j<2;j++){let k=namesForSlot[(seed+j*3)%namesForSlot.length];stats[k]=(stats[k]||0)+quality*quality*(j===0?2:1)+(seed%9)}
+    const price=100+Math.pow(quality,4)*100+si*2500+p*80+m*50+b*20+sf*10;
+    arr.push({id:id++,name:names.join(' '),slot:slot[0],slotName:slot[1],icon:slot[2],grade,price,bonus:stats});
+  }
+  allGear=arr;return arr;
+}
+function bonusText(obj){return Object.entries(obj||{}).map(([k,v])=>`${STAT_DEFS.find(x=>x[0]===k)?.[1]||k} +${v}`).join(' · ')}
+function updateCatalogCount(){$('catalogCount').textContent='50,000종';$('inventoryCount').textContent=game.inventory.length+'개'}
+function renderGearCatalog(resetPage=false){
+  const list=$('gearList');if(!list)return;
+  if(resetPage)gearPage=0;
+  const arr=createCatalog(),q=($('gearSearch').value||'').trim().toLowerCase(),filter=$('gearFilter').value;
+  const selected=arr.filter(g=>(filter==='all'||g.slot===filter)&&(!q||g.name.toLowerCase().includes(q)||String(g.grade).includes(q)))
+    .sort((a,b)=>a.grade-b.grade||SLOTS.findIndex(x=>x[0]===a.slot)-SLOTS.findIndex(x=>x[0]===b.slot)||a.id-b.id);
+  const pageCount=Math.max(1,Math.ceil(selected.length/GEAR_PAGE_SIZE));
+  gearPage=Math.max(0,Math.min(gearPage,pageCount-1));
+  const start=gearPage*GEAR_PAGE_SIZE;
+  const pageItems=selected.slice(start,start+GEAR_PAGE_SIZE);
+  let lastGrade=null;
+  const rows=pageItems.map(g=>{const heading=lastGrade!==g.grade?`<div class="grade-group-title">${g.grade}등급 장비</div>`:'';lastGrade=g.grade;return heading+`<div class="gear-row"><div><div class="gear-name">${g.icon} ${safeText(g.name)}</div><div class="gear-meta">${g.slotName} · ${bonusText(g.bonus)}</div></div><div><span class="grade grade-${g.grade}">${g.grade}등급</span><div class="gear-meta">${fmtMoney(g.price)}G</div></div><button class="gear-buy" data-buygear="${g.id}">구매</button></div>`}).join('');
+  const pagination=selected.length?`<div class="gear-pagination"><button class="secondary" data-page="prev" ${gearPage===0?'disabled':''}>이전</button><span class="gear-page-label">${start+1}~${Math.min(start+GEAR_PAGE_SIZE,selected.length)} / ${selected.length.toLocaleString('ko-KR')}개<br>${gearPage+1} / ${pageCount}페이지</span><button class="secondary" data-page="next" ${gearPage>=pageCount-1?'disabled':''}>다음</button></div>`:'';
+  list.innerHTML=rows||'<p class="small">검색 결과가 없어.</p>';
+  list.insertAdjacentHTML('beforeend',pagination);
+  catalogRendered=true;updateCatalogCount();
+}
+$('gearList').addEventListener('click',e=>{
+  const buy=e.target.closest('[data-buygear]');
+  if(buy){buyGear(Number(buy.dataset.buygear));return}
+  const page=e.target.closest('[data-page]');
+  if(page){gearPage+=page.dataset.page==='next'?1:-1;renderGearCatalog()}
+});
+function buyGear(id){
+  const g=createCatalog().find(x=>x.id===id);if(!g)return;
+  if(game.money<g.price){alert('골드가 부족해! 이 장비의 가격은 '+fmtMoney(g.price)+'G야.');return}
+  game.money-=g.price;game.inventory.push({...g,uid:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random())});render();
+}
+function equipItem(uid){
+  let h=activeHero();if(!h)return;
+  let idx=game.inventory.findIndex(x=>String(x.uid)===String(uid));if(idx<0)return;
+  let item=game.inventory.splice(idx,1)[0],old=h.equipped[item.slot];if(old)game.inventory.push(old);h.equipped[item.slot]=item;render();
+}
+function unequip(slot){let h=activeHero();if(!h||!h.equipped[slot])return;game.inventory.push(h.equipped[slot]);h.equipped[slot]=null;render()}
+function updateStageGuide(){
+  const raw=Number($('battleStage')?.value||1);
+  const stage=Number.isFinite(raw)?Math.max(1,Math.min(10000000,Math.floor(raw))):1;
+  const st=BigInt(stage);
+  // 단계별 적 체력 증가를 기준으로 한 참고 범위: 1단계는 1~10, 이후 10×단계²까지 증가.
+  const max=10n*st*st;
+  const prev=st-1n;
+  const min=stage===1?1n:(10n*prev*prev+1n);
+  const target=$('stagePowerGuide');
+  if(target)target.textContent=`${stage.toLocaleString('en-US')}단계 (적정 전투력 ${fmtUncapped(min)}~${fmtUncapped(max)})`;
+}
+function startBattle(){
+  let h=activeHero();if(!h)return alert('먼저 분신을 만들어 줘.');
+  let raw=$('battleStage').value,stage=Number(raw);
+  if(!Number.isInteger(stage)||stage<1||stage>10000000){alert('전투 단계는 1부터 10,000,000까지의 정수로 입력해 줘.');return}
+  const result=autoFight(h,stage),lines=result.lines;
+  if(result.win){
+    const reward=50+stage*20;game.money+=reward;game.wins++;
+    $('battleLog').innerHTML=lines.join('<br>')+`<p class="good"><b>승리! ${fmtMoney(reward)}G 획득</b></p>`;
+  }else{
+    const penalty=25+stage*10,actual=Math.min(game.money,penalty);game.money-=actual;game.losses++;
+    $('battleLog').innerHTML=lines.join('<br>')+`<p class="bad"><b>패배! ${fmtMoney(actual)}G 잃음</b></p><p class="small">패배 손실 기준액: ${fmtMoney(penalty)}G (보유 골드보다 많이 잃지는 않아)</p>`;
+  }
+  render();
+}
+function autoFight(hero,stage){
+  let s=gearStats(hero);
+  // 적 능력치는 단계에 따라 상승한다. 원하는 단계에 바로 도전할 수 있다.
+  let st=BigInt(stage),enemy={
+    hp:100n+st*st*20n,
+    atk:8n+st*2n,
+    def:1n+st/2n,
+    spd:8n+st/1000n,
+    evade:Math.min(70,Math.floor(stage/200000))
+  };
+  let hp=s.hp,ehp=enemy.hp,lines=[`<b>${safeText(hero.name)}</b> · 전투 ${stage.toLocaleString('en-US')}단계`];
+  for(let turn=1;turn<=30&&hp>0n&&ehp>0n;turn++){
+    let order=s.spd>=enemy.spd?['me','foe']:['foe','me'];
+    for(let who of order){
+      if(hp<=0n||ehp<=0n)break;
+      if(who==='me'){
+        let hitChance=Math.max(1,Math.min(99,Number(s.acc>99n?99n:s.acc)-enemy.evade));
+        if(Math.random()*100>=hitChance){lines.push('내 분신의 공격이 빗나갔다.');continue}
+        let crit=Math.random()*100<Math.max(0,Math.min(95,Number(s.crit>95n?95n:s.crit)));
+        let damage=s.atk+(crit?s.atk* s.critDmg/100n:0n);
+        damage-=enemy.def>s.pen?enemy.def-s.pen:0n;if(damage<1n)damage=1n;
+        ehp-=damage;let heal=damage*s.life/100n;if(heal>0n)hp=hp+heal>s.hp?s.hp:hp+heal;
+        lines.push(`<span class="good">분신 공격! ${fmtUncapped(damage)} 피해${crit?' (치명타)':''}</span>`);
+      }else{
+        let evade=Math.max(0,Math.min(95,Number(s.evade>95n?95n:s.evade)));
+        if(Math.random()*100<evade){lines.push('<span class="good">적의 공격을 회피했다!</span>');continue}
+        let damage=enemy.atk>s.def?enemy.atk-s.def:1n;if(damage<1n)damage=1n;
+        hp-=damage;lines.push(`<span class="bad">적 반격! ${fmtUncapped(damage)} 피해</span>`);
+      }
+    }
+    if(s.regen>0n&&hp>0n)hp=hp+s.regen>s.hp?s.hp:hp+s.regen;
+  }
+  return {win:hp>0n&&ehp<=0n,lines};
+}
+async function api(path,body){const response=await fetch(apiBase+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw Error(data.error||'서버 오류');return data}
+async function connectServer(){
+  let h=activeHero();if(!h)return alert('먼저 분신을 만들어 줘.');
+  apiBase=$('serverUrl').value.trim().replace(/\/$/,'');if(!apiBase)return alert('온라인 PvP 서버가 아직 배포되지 않았어. 서버 주소를 먼저 준비해야 해.');let name=$('onlineName').value.trim();if(!name)return alert('온라인 닉네임을 입력해 줘.');
+  if(!game.playerId)game.playerId=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
+  try{
+    await api('/api/register',{id:game.playerId,name,heroName:h.name,rank:h.rank,power:String(combatPower(h))});
+    $('netState').textContent='서버 연결됨';$('queueText').textContent='서버에 접속했어. 대전 상대를 찾을 수 있어.';loadRanking();
+    if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(checkMatch,1700);
+  }catch(e){$('netState').textContent='연결 실패';$('queueText').textContent=e.message+' (서버가 실행 중인지 확인해 줘.)'}
+}
+async function findOpponent(){
+  if(!game.playerId)return alert('먼저 서버에 접속해 줘.');
+  let h=activeHero();if(!h)return alert('분신을 먼저 만들어 줘.');
+  try{await api('/api/queue',{id:game.playerId,heroName:h.name,rank:h.rank,power:String(combatPower(h))});$('queueText').textContent='대전 상대를 찾고 있어...';}
+  catch(e){$('queueText').textContent=e.message}
+}
+async function challengePlayer(){
+  if(!game.playerId)return alert('먼저 서버에 접속해 줘.');
+  let h=activeHero();if(!h)return alert('분신을 먼저 만들어 줘.');
+  let target=$('targetPlayer').value.trim();if(!target)return alert('상대방의 닉네임을 입력해 줘.');
+  try{
+    const r=await api('/api/challenge',{id:game.playerId,targetName:target,heroName:h.name,rank:h.rank,power:String(combatPower(h))});
+    $('queueText').textContent=`${r.opponent.name} 플레이어와 대결했어. 결과를 확인해 줘.`;
+    await checkMatch();
+  }catch(e){$('queueText').textContent=e.message}
+}
+async function cancelQueue(){if(!game.playerId)return;try{await api('/api/cancel',{id:game.playerId});$('queueText').textContent='대기열에서 나왔어.'}catch(e){$('queueText').textContent=e.message}}
+async function checkMatch(){
+  if(!game.playerId)return;
+  try{let r=await api('/api/match/'+encodeURIComponent(game.playerId));if(r.match){let m=r.match;
+    if(m.result==='win'){game.onlineWins++;game.money+=m.reward||0}else game.losses++;
+    $('pvpLog').innerHTML=`<p>상대: <b>${safeText(m.opponent.name)}</b> · ${m.opponent.rank}등급 · 전투력 ${safeText(m.opponent.power)}</p><p>${m.result==='win'?'<b class="good">승리!</b>':'<b class="bad">패배</b>'}</p><p>${safeText(m.summary)}</p>${m.reward?`<p class="goldtxt">${fmtMoney(m.reward)}G 획득</p>`:''}`;
+    $('queueText').textContent='대전이 끝났어.';render();loadRanking();
+  }}catch(e){}
+}
+async function loadRanking(){
+  try{let r=await api('/api/rankings');$('rankingTable').innerHTML='<table><tr><th>순위</th><th>플레이어</th><th>분신</th><th>등급</th><th>전투력</th><th>승리</th></tr>'+r.players.map((p,i)=>`<tr><td>${i+1}</td><td>${safeText(p.name)}</td><td>${safeText(p.heroName||'-')}</td><td>${p.rank}등급</td><td>${safeText(p.power)}</td><td>${p.wins}</td></tr>`).join('')+'</table>'}
+  catch(e){$('rankingTable').textContent='온라인 PvP 서버가 아직 연결되지 않았어. GitHub Pages는 화면 파일만 실행하므로 별도 온라인 서버를 배포해야 랭킹을 사용할 수 있어.'}
+}
+$('rankOdds').innerHTML=rankOddsHtml();
+loadLocal(true);
+render();
+window.addEventListener('pagehide',persistGame);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistGame()});
+updateStageGuide();
+renderBossPreview();setInterval(renderBossPreview,1000);
+</script>
+</body>
+</html>
