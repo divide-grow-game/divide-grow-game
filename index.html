@@ -273,16 +273,7 @@ async function joinBoss(bossId) {
     return;
   }
 
-  try {
-    const result = await api(
-      `/api/bosses/${bossId}/join`,
-      { id: game.playerId }
-    );
-
-    selectedBossId = bossId;
-    bossPlayerHp = Number(result.currentHp);
-    bossMaxPlayerHp = Number(result.maxHp);
-
+ 
     alert('보스전에 입장했어!');
     renderBossBattle();
 
