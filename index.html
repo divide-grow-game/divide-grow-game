@@ -453,7 +453,7 @@ function persistGame(){
   try{localStorage.setItem(SAVE_KEY,serialiseGame());return true}
   catch(e){console.warn('자동 저장 실패:',e);return false}
 }
-functionfunction normaliseGame(data){
+function normaliseGame(data){
   if(!data||typeof data!=='object'||!Array.isArray(data.heroes)){
     throw new Error('invalid save');
   }
@@ -522,19 +522,7 @@ functionfunction normaliseGame(data){
   }
 
   return restored;
-}
-    stats:{...newStats(Number(h.rank)||15),...(h.stats||{})},
-    equipped:{weapon:null,armor:null,helmet:null,gloves:null,boots:null,...(h.equipped||{})}
-  }));
-  restored.inventory=Array.isArray(restored.inventory)?restored.inventory:[];
-  restored.money=Math.max(0,Number(restored.money)||0);
-  restored.gems=Math.max(0,Number(restored.gems)||0);
-  restored.wins=Math.max(0,Number(restored.wins)||0);
-  restored.losses=Math.max(0,Number(restored.losses)||0);
-  restored.onlineWins=Math.max(0,Number(restored.onlineWins)||0);
-  if(!restored.heroes.some(h=>h.id===restored.selectedHeroId))restored.selectedHeroId=restored.heroes[0]?.id||null;
-  return restored;
-}
+}}
 function loadLocal(silent=false){
   try{
     const raw=localStorage.getItem(SAVE_KEY);
