@@ -224,7 +224,7 @@ const SLOT_STATS={
  gloves:['atk','spd','crit'],boots:['spd','evade','luck']
 };
 let game={money:500,gems:5,heroes:[],selectedHeroId:null,wins:0,losses:0,inventory:[],playerId:null,onlineWins:0};
-let apiBase='http://localhost:3000',pollTimer=null;
+let apiBase='https://divide-grow-game.onrender.com',pollTimer=null;
 let allGear=null,catalogRendered=false,gearPage=0;
 const GEAR_PAGE_SIZE=100;
 let bossData=[],selectedBossId=null,bossPlayerHp=0n,bossMaxPlayerHp=0n,bossContribution=0n,bossBusy=false,bossPreviewBusy=false;
