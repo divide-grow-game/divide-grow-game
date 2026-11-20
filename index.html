@@ -625,7 +625,18 @@ async function loadRanking(){
   catch(e){$('rankingTable').textContent='온라인 PvP 서버가 아직 연결되지 않았어. GitHub Pages는 화면 파일만 실행하므로 별도 온라인 서버를 배포해야 랭킹을 사용할 수 있어.'}
 }
 $('rankOdds').innerHTML=rankOddsHtml();
-loadLocal(true);
+localStorage.removeItem(SAVE_KEY);
+game={
+  money:500,
+  gems:5,
+  heroes:[],
+  selectedHeroId:null,
+  wins:0,
+  losses:0,
+  inventory:[],
+  playerId:null,
+  onlineWins:0
+};
 render();
 window.addEventListener('pagehide',persistGame);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistGame()});
