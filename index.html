@@ -80,7 +80,7 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
 <div class="top">
   <div class="resources">
     <span class="pill">🪙 골드 <b id="money">0</b></span>
-    <span class="pill">💠 보석 <b id="gems">0</b></span>
+  
     <span class="pill">🪞 분신 <b id="heroCount">0 / 15</b></span>
     <span class="pill">🌐 <b id="netState">오프라인</b></span>
   </div>
@@ -224,7 +224,17 @@ const SLOT_STATS={
  weapon:['atk','critDmg','pen'],armor:['def','hp','regen'],helmet:['hp','acc','luck'],
  gloves:['atk','spd','crit'],boots:['spd','evade','luck']
 };
-let game={money:500,gems:5,heroes:[],selectedHeroId:null,wins:0,losses:0,inventory:[],playerId:null,onlineWins:0};
+let game={
+  money:500,
+  heroes:[],
+  selectedHeroId:null,
+  nextHeroNumber:1,
+  wins:0,
+  losses:0,
+  inventory:[],
+  playerId:null,
+  onlineWins:0
+};
 let apiBase='https://divide-grow-game.onrender.com',pollTimer=null;
 let allGear=null,catalogRendered=false,gearPage=0;
 const GEAR_PAGE_SIZE=100;
@@ -355,10 +365,40 @@ function newStats(rank){
     pen:String(2n+f),life:String(f),regen:String(f),luck:String(5n+f*2n)};
 }
 function createHero(){
-  if(game.heroes.length>=15){alert('분신은 최대 15개까지 만들 수 있어.');return}
-  let name=$('heroName').value.trim();if(!name){alert('분신 이름을 입력해 줘.');return}
-  let rank=rollRank(),hero={id:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random()),name,icon:$('heroIcon').value,rank,stats:newStats(rank),equipped:{weapon:null,armor:null,helmet:null,gloves:null,boots:null}};
-  game.heroes.push(hero);game.selectedHeroId=hero.id;$('heroName').value='';render();tab('home');
+  if(game.heroes.length>=15){
+    alert('분신은 최대 15개까지 만들 수 있어.');
+    return;
+  }
+
+  let name=$('heroName').value.trim();
+  if(!name){
+    alert('분신 이름을 입력해 줘.');
+    return;
+  }
+
+  let rank=rollRank();
+
+  let hero={
+    id:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random()),
+    heroNumber:game.nextHeroNumber++,
+    name,
+    icon:$('heroIcon').value,
+    rank,
+    stats:newStats(rank),
+    equipped:{
+      weapon:null,
+      armor:null,
+      helmet:null,
+      gloves:null,
+      boots:null
+    }
+  };
+
+  game.heroes.push(hero);
+  game.selectedHeroId=hero.id;
+  $('heroName').value='';
+  render();
+  tab('home');
 }
 function selectHero(id){game.selectedHeroId=id;render()}
 function basePower(hero){
@@ -368,6 +408,22 @@ function basePower(hero){
   let total=0n;
   for(const [k] of STAT_DEFS) total+=clampStat(hero.stats[k]);
   return total/BigInt(STAT_DEFS.length);
+}
+  function deleteHero(id){
+  const hero=game.heroes.find(h=>h.id===id);
+  if(!hero)return;
+
+  if(!confirm(
+    `분신 번호 ${hero.heroNumber}번 '${hero.name}'을(를) 삭제할까?\n삭제한 분신은 복구할 수 없어.`
+  ))return;
+
+  game.heroes=game.heroes.filter(h=>h.id!==id);
+
+  if(game.selectedHeroId===id){
+    game.selectedHeroId=game.heroes[0]?.id||null;
+  }
+
+  render();
 }
 function equipmentPower(hero){
   // 장착 장비의 능력치 보너스 합계는 기본 능력치/전투력 상한과 별도로 더한다.
@@ -397,12 +453,76 @@ function persistGame(){
   try{localStorage.setItem(SAVE_KEY,serialiseGame());return true}
   catch(e){console.warn('자동 저장 실패:',e);return false}
 }
-function normaliseGame(data){
-  if(!data||typeof data!=='object'||!Array.isArray(data.heroes))throw new Error('invalid save');
-  const base={money:500,gems:5,heroes:[],selectedHeroId:null,wins:0,losses:0,inventory:[],playerId:null,onlineWins:0};
-  const restored={...base,...data};
-  restored.heroes=restored.heroes.slice(0,15).map(h=>({
-    ...h,
+functionfunction normaliseGame(data){
+  if(!data||typeof data!=='object'||!Array.isArray(data.heroes)){
+    throw new Error('invalid save');
+  }
+
+  const restored={
+    money:500,
+    heroes:[],
+    selectedHeroId:null,
+    nextHeroNumber:1,
+    wins:0,
+    losses:0,
+    inventory:[],
+    playerId:null,
+    onlineWins:0,
+    ...data
+  };
+
+  delete restored.gems;
+
+  const usedNumbers=new Set();
+  let maxNumber=0;
+
+  restored.heroes=restored.heroes.slice(0,15).map((h,index)=>{
+    let number=Number(h.heroNumber);
+
+    if(!Number.isSafeInteger(number)||number<1||usedNumbers.has(number)){
+      number=maxNumber+1;
+      while(usedNumbers.has(number))number++;
+    }
+
+    usedNumbers.add(number);
+    maxNumber=Math.max(maxNumber,number);
+
+    return {
+      ...h,
+      heroNumber:number,
+      stats:{
+        ...newStats(Number(h.rank)||15),
+        ...(h.stats||{})
+      },
+      equipped:{
+        weapon:null,
+        armor:null,
+        helmet:null,
+        gloves:null,
+        boots:null,
+        ...(h.equipped||{})
+      }
+    };
+  });
+
+  restored.nextHeroNumber=Math.max(
+    maxNumber+1,
+    Number(restored.nextHeroNumber)||1
+  );
+
+  restored.inventory=Array.isArray(restored.inventory)
+    ?restored.inventory:[];
+  restored.money=Math.max(0,Number(restored.money)||0);
+  restored.wins=Math.max(0,Number(restored.wins)||0);
+  restored.losses=Math.max(0,Number(restored.losses)||0);
+  restored.onlineWins=Math.max(0,Number(restored.onlineWins)||0);
+
+  if(!restored.heroes.some(h=>h.id===restored.selectedHeroId)){
+    restored.selectedHeroId=restored.heroes[0]?.id||null;
+  }
+
+  return restored;
+}
     stats:{...newStats(Number(h.rank)||15),...(h.stats||{})},
     equipped:{weapon:null,armor:null,helmet:null,gloves:null,boots:null,...(h.equipped||{})}
   }));
@@ -431,10 +551,23 @@ function saveLocal(){
 }
 function tab(id){document.querySelectorAll('main section').forEach(x=>x.classList.toggle('hidden',x.id!==id));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));render();if(id==='gear'&&!catalogRendered)renderGearCatalog()}
 function render(){
-  $('money').textContent=fmtMoney(game.money);$('gems').textContent=fmtMoney(game.gems);$('heroCount').textContent=`${game.heroes.length} / 15`;
+  $('money').textContent=fmtMoney(game.money);
+$('heroCount').textContent=`${game.heroes.length} / 15`;
   $('createCount').textContent=`현재 ${game.heroes.length} / 15개 생성`;
   $('createButton').disabled=game.heroes.length>=15;
-  $('createdHeroes').innerHTML=game.heroes.length?game.heroes.map(h=>`<div class="unit"><span class="emoji">${h.icon}</span><b>${safeText(h.name)}</b><div class="small">${h.rank}등급 · ${RANK_NAMES[h.rank-1]}</div><div class="small">전투력 ${fmtUncapped(combatPower(h))}</div><button class="secondary" onclick="selectHero('${h.id}')">선택하기</button></div>`).join(''):'<p class="small">아직 분신이 없어. 먼저 직접 만들어 줘.</p>';
+ $('createdHeroes').innerHTML=game.heroes.length
+?game.heroes.map(h=>`
+  <div class="unit">
+    <span class="emoji">${h.icon}</span>
+    <b>${safeText(h.name)}</b>
+    <div class="small">고유 번호: #${h.heroNumber}</div>
+    <div class="small">${h.rank}등급 · ${RANK_NAMES[h.rank-1]}</div>
+    <div class="small">전투력 ${fmtUncapped(combatPower(h))}</div>
+    <button class="secondary" onclick="selectHero('${h.id}')">선택하기</button>
+    <button onclick="deleteHero('${h.id}')">분신 삭제</button>
+  </div>
+`).join('')
+:'<p class="small">아직 분신이 없어. 먼저 직접 만들어 줘.</p>';
   let h=activeHero();
   if(!h){
     $('heroCard').textContent='먼저 분신 생성 탭에서 분신을 만들어 줨.';
