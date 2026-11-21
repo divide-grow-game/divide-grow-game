@@ -39,6 +39,190 @@ const BOSS_NAMES = [
   "혼돈의 군주", "창세의 용"
 ];
 
+const BOSS_DATA = {
+  '고대의 화염룡': {
+    recommendedPower: '50000',
+    minDamage: 30000,
+    maxDamage: 500000,
+    skills: [
+      { name: '용암 폭발', description: '플레이어에게 추가 피해를 주는 화염 공격!', type: 'burn' },
+      { name: '화염의 숨결', description: '3턴 동안 플레이어의 공격력을 낮춘다!', type: 'weaken' }
+    ]
+  },
+  '심연의 해신': {
+    recommendedPower: '100000',
+    minDamage: 50000,
+    maxDamage: 1000000,
+    skills: [
+      { name: '심해의 속박', description: '플레이어의 움직임을 2턴 동안 봉쇄한다!', type: 'freeze' },
+      { name: '해일', description: '플레이어에게 강력한 추가 피해를 준다!', type: 'drain' }
+    ]
+  },
+  '천공의 거신': {
+    recommendedPower: '200000',
+    minDamage: 100000,
+    maxDamage: 1500000,
+    skills: [
+      { name: '천공 강타', description: '플레이어의 방어력을 3턴 동안 낮춘다!', type: 'defenseDown' },
+      { name: '거신의 압박', description: '플레이어의 공격을 1턴 동안 봉쇄한다!', type: 'freeze' }
+    ]
+  },
+  '망각의 수호자': {
+    recommendedPower: '350000',
+    minDamage: 150000,
+    maxDamage: 2000000,
+    skills: [
+      { name: '기억 삭제', description: '플레이어의 공격력을 3턴 동안 낮춘다!', type: 'weaken' },
+      { name: '망각의 저주', description: '플레이어의 회복을 3턴 동안 막는다!', type: 'healBlock' }
+    ]
+  },
+  '칠흑의 늑대왕': {
+    recommendedPower: '500000',
+    minDamage: 200000,
+    maxDamage: 2500000,
+    skills: [
+      { name: '그림자 습격', description: '플레이어에게 추가 피해를 준다!', type: 'drain' },
+      { name: '늑대왕의 포효', description: '플레이어의 회피 능력을 3턴 동안 낮춘다!', type: 'slow' }
+    ]
+  },
+  '시간의 파수꾼': {
+    recommendedPower: '750000',
+    minDamage: 300000,
+    maxDamage: 3000000,
+    skills: [
+      { name: '시간 정지', description: '플레이어를 3턴 동안 얼어붙게 만든다!', type: 'freeze' },
+      { name: '시간 역행', description: '보스의 체력을 일부 회복한다!', type: 'drain' }
+    ]
+  },
+  '별을 삼키는 자': {
+    recommendedPower: '1000000',
+    minDamage: 400000,
+    maxDamage: 3500000,
+    skills: [
+      { name: '성운 폭발', description: '플레이어에게 지속 피해를 준다!', type: 'poison' },
+      { name: '중력 붕괴', description: '플레이어의 방어력을 3턴 동안 낮춘다!', type: 'defenseDown' }
+    ]
+  },
+  '영원의 골렘': {
+    recommendedPower: '1500000',
+    minDamage: 500000,
+    maxDamage: 4000000,
+    skills: [
+      { name: '영원의 방벽', description: '보스가 2턴 동안 받는 피해를 줄인다!', type: 'shield' },
+      { name: '대지 분쇄', description: '플레이어에게 강력한 추가 피해를 준다!', type: 'drain' }
+    ]
+  },
+  '폭풍의 군주': {
+    recommendedPower: '2000000',
+    minDamage: 600000,
+    maxDamage: 4500000,
+    skills: [
+      { name: '천둥 강타', description: '플레이어에게 지속 피해를 준다!', type: 'burn' },
+      { name: '폭풍의 감옥', description: '플레이어의 움직임을 2턴 동안 봉쇄한다!', type: 'freeze' }
+    ]
+  },
+  '황혼의 여왕': {
+    recommendedPower: '3000000',
+    minDamage: 700000,
+    maxDamage: 5000000,
+    skills: [
+      { name: '황혼의 저주', description: '플레이어의 회복을 3턴 동안 막는다!', type: 'healBlock' },
+      { name: '어둠의 유혹', description: '플레이어의 공격력을 3턴 동안 낮춘다!', type: 'weaken' }
+    ]
+  },
+  '태초의 정령': {
+    recommendedPower: '4000000',
+    minDamage: 800000,
+    maxDamage: 5500000,
+    skills: [
+      { name: '원초의 파동', description: '플레이어의 방어력을 3턴 동안 낮춘다!', type: 'defenseDown' },
+      { name: '생명의 역류', description: '보스가 체력을 일부 회복한다!', type: 'drain' }
+    ]
+  },
+  '심판의 기계신': {
+    recommendedPower: '5000000',
+    minDamage: 1000000,
+    maxDamage: 6000000,
+    skills: [
+      { name: '심판 광선', description: '플레이어에게 지속 피해를 준다!', type: 'poison' },
+      { name: '전투 시스템 교란', description: '플레이어의 공격력을 3턴 동안 낮춘다!', type: 'weaken' }
+    ]
+  },
+  '빙하의 제왕': {
+    recommendedPower: '7000000',
+    minDamage: 1200000,
+    maxDamage: 6500000,
+    skills: [
+      { name: '절대 영하', description: '플레이어를 3턴 동안 얼려 공격할 수 없게 만든다!', type: 'freeze' },
+      { name: '빙하 감옥', description: '플레이어의 회피 능력을 3턴 동안 낮춘다!', type: 'slow' }
+    ]
+  },
+  '독안개 군주': {
+    recommendedPower: '9000000',
+    minDamage: 1500000,
+    maxDamage: 7000000,
+    skills: [
+      { name: '맹독 안개', description: '플레이어에게 3턴 동안 지속 피해를 준다!', type: 'poison' },
+      { name: '약화 독소', description: '플레이어의 공격력을 3턴 동안 낮춘다!', type: 'weaken' }
+    ]
+  },
+  '차원의 포식자': {
+    recommendedPower: '12000000',
+    minDamage: 1800000,
+    maxDamage: 7500000,
+    skills: [
+      { name: '차원 균열', description: '플레이어의 방어력을 3턴 동안 낮춘다!', type: 'defenseDown' },
+      { name: '공간 포식', description: '플레이어에게 강력한 추가 피해를 준다!', type: 'drain' }
+    ]
+  },
+  '무한의 그림자': {
+    recommendedPower: '15000000',
+    minDamage: 2000000,
+    maxDamage: 8000000,
+    skills: [
+      { name: '그림자 속박', description: '플레이어를 2턴 동안 움직이지 못하게 만든다!', type: 'freeze' },
+      { name: '무한의 저주', description: '플레이어의 회복을 3턴 동안 막는다!', type: 'healBlock' }
+    ]
+  },
+  '태양의 수호룡': {
+    recommendedPower: '20000000',
+    minDamage: 2500000,
+    maxDamage: 8500000,
+    skills: [
+      { name: '태양 폭발', description: '플레이어에게 지속 피해를 준다!', type: 'burn' },
+      { name: '광휘의 방패', description: '보스가 2턴 동안 받는 피해를 줄인다!', type: 'shield' }
+    ]
+  },
+  '달의 마녀왕': {
+    recommendedPower: '25000000',
+    minDamage: 3000000,
+    maxDamage: 9000000,
+    skills: [
+      { name: '월식의 저주', description: '플레이어의 공격력을 3턴 동안 낮춘다!', type: 'weaken' },
+      { name: '달빛 봉인', description: '플레이어의 회복을 3턴 동안 막는다!', type: 'healBlock' }
+    ]
+  },
+  '혼돈의 군주': {
+    recommendedPower: '30000000',
+    minDamage: 3500000,
+    maxDamage: 9500000,
+    skills: [
+      { name: '혼돈의 파동', description: '플레이어의 공격과 방어를 약화한다!', type: 'confuse' },
+      { name: '혼돈의 폭발', description: '플레이어에게 지속 피해를 준다!', type: 'poison' }
+    ]
+  },
+  '창세의 용': {
+    recommendedPower: '50000000',
+    minDamage: 4000000,
+    maxDamage: 10000000,
+    skills: [
+      { name: '창세의 심판', description: '플레이어를 3턴 동안 얼려 공격할 수 없게 만든다!', type: 'freeze' },
+      { name: '세계의 종말', description: '플레이어의 방어력을 낮추고 지속 피해를 준다!', type: 'poison' }
+    ]
+  }
+};
+
+
 const ALLOWED_STATS = [
   "hp", "atk", "def", "spd", "crit", "critDmg",
   "acc", "evade", "pen", "life", "regen", "luck"
@@ -188,6 +372,11 @@ async function initialiseDatabase() {
       max_hp TEXT NOT NULL,
       PRIMARY KEY (cycle_key, boss_id, player_id)
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE boss_player_states
+    ADD COLUMN IF NOT EXISTS status_json TEXT NOT NULL DEFAULT '{}'
   `);
 
   const result = await pool.query(
