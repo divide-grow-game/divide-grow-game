@@ -91,7 +91,7 @@ const BOSS_DATA = {
     maxDamage: 3000000,
     skills: [
       { name: '시간 정지', description: '플레이어를 3턴 동안 얼어붙게 만든다!', type: 'freeze' },
-      { name: '시간 역행', description: '보스의 체력을 일부 회복한다!', type: 'drain' }
+      { name: '시간 역행', description: '보스의 체력을 일부 회복한다!', type: 'bossHeal' }
     ]
   },
   '별을 삼키는 자': {
@@ -136,7 +136,7 @@ const BOSS_DATA = {
     maxDamage: 5500000,
     skills: [
       { name: '원초의 파동', description: '플레이어의 방어력을 3턴 동안 낮춘다!', type: 'defenseDown' },
-      { name: '생명의 역류', description: '보스가 체력을 일부 회복한다!', type: 'drain' }
+      { name: '생명의 역류', description: '보스가 체력을 일부 회복한다!', type: 'bossHeal' }
     ]
   },
   '심판의 기계신': {
@@ -400,6 +400,7 @@ async function initialiseDatabase() {
 app.get("/", (req, res) => {
   res.send("분신 키우기 서버 실행 중!");
 });
+
 // 현재 공용 보스 3종 조회
 app.get("/api/bosses", async (req, res) => {
   try {
@@ -417,6 +418,8 @@ app.get("/api/bosses", async (req, res) => {
       cycle,
       bosses: result.rows.map(boss => ({
         ...boss,
+        recommendedPower: BOSS_DATA[boss.name]?.recommendedPower || "0",
+        skills: BOSS_DATA[boss.name]?.skills || [],
         defeated: Boolean(Number(boss.defeated))
       }))
     });
@@ -457,7 +460,7 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
     const maxHp = maxHpValue.toString();
 
     let stateResult = await pool.query(
-      `SELECT current_hp, max_hp FROM boss_player_states
+      `SELECT current_hp, max_hp, status_json FROM boss_player_states
        WHERE cycle_key = $1 AND boss_id = $2 AND player_id = $3`,
       [cycle, bossId, playerId]
     );
@@ -473,7 +476,7 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
       );
 
       stateResult = await pool.query(
-        `SELECT current_hp, max_hp FROM boss_player_states
+        `SELECT current_hp, max_hp, status_json FROM boss_player_states
          WHERE cycle_key = $1 AND boss_id = $2 AND player_id = $3`,
         [cycle, bossId, playerId]
       );
@@ -507,6 +510,8 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
         name: boss.name,
         current_hp: boss.current_hp,
         max_hp: boss.max_hp,
+        recommendedPower: BOSS_DATA[boss.name]?.recommendedPower || "0",
+        skills: BOSS_DATA[boss.name]?.skills || [],
         defeated: Boolean(Number(boss.defeated))
       },
       currentHp: state.current_hp,
@@ -557,7 +562,7 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     }
 
     const stateResult = await client.query(
-      `SELECT current_hp, max_hp FROM boss_player_states
+      `SELECT current_hp, max_hp, status_json FROM boss_player_states
        WHERE cycle_key = $1 AND boss_id = $2 AND player_id = $3 FOR UPDATE`,
       [cycle, bossId, playerId]
     );
@@ -566,6 +571,14 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     if (!state) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "먼저 보스전에 입장해 줘." });
+    }
+
+    let playerStatus = {};
+
+    try {
+      playerStatus = JSON.parse(state.status_json || "{}");
+    } catch {
+      playerStatus = {};
     }
 
     if (safeBigInt(state.current_hp) <= 0n) {
@@ -597,18 +610,71 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
       luck: roll("luck")
     };
 
+    const bossData = BOSS_DATA[boss.name] || {
+      recommendedPower: "0",
+      minDamage: 30000,
+      maxDamage: 100000,
+      skills: []
+    };
+
     const bossMax = safeBigInt(boss.max_hp);
     const oldBossHp = safeBigInt(boss.current_hp);
     const oldPlayerHp = safeBigInt(state.current_hp);
     const bossDefense = 10n;
     const luckBonus = combat.luck >= 1000n ? 10 : Number(combat.luck / 100n);
 
+    // 기존 지속 피해를 먼저 적용하고 남은 턴을 줄인다.
+    let statusDamage = 0n;
+    for (const effect of ["burn", "poison"]) {
+      const turnsKey = `${effect}Turns`;
+      const damageKey = `${effect}Damage`;
+      const turns = Math.max(0, Number(playerStatus[turnsKey] || 0));
+
+      if (turns > 0) {
+        statusDamage += safeBigInt(playerStatus[damageKey] || 0);
+        playerStatus[turnsKey] = turns - 1;
+        if (playerStatus[turnsKey] === 0) delete playerStatus[damageKey];
+      }
+    }
+
+    let newPlayerHp = oldPlayerHp > statusDamage
+      ? oldPlayerHp - statusDamage
+      : 0n;
+
+    // 상태 이상에 따라 플레이어 능력치를 조정한다.
+    const frozen = Number(playerStatus.freezeTurns || 0) > 0;
+    if (frozen) playerStatus.freezeTurns--;
+
+    const weakened = Number(playerStatus.weakenTurns || 0) > 0;
+    if (weakened) playerStatus.weakenTurns--;
+
+    const defenseReduced = Number(playerStatus.defenseDownTurns || 0) > 0;
+    if (defenseReduced) playerStatus.defenseDownTurns--;
+
+    const slowed = Number(playerStatus.slowTurns || 0) > 0;
+    if (slowed) playerStatus.slowTurns--;
+
+    const confused = Number(playerStatus.confuseTurns || 0) > 0;
+    if (confused) playerStatus.confuseTurns--;
+
+    const healBlocked = Number(playerStatus.healBlockTurns || 0) > 0;
+    if (healBlocked) playerStatus.healBlockTurns--;
+
+    const bossShielded = Number(playerStatus.bossShieldTurns || 0) > 0;
+    if (bossShielded) playerStatus.bossShieldTurns--;
+
+    const effectiveAtk = combat.atk *
+      BigInt(confused ? 50 : weakened ? 70 : 100) / 100n;
+    const effectiveDef = combat.def *
+      BigInt(confused ? 50 : defenseReduced ? 50 : 100) / 100n;
+
     const hitChance = Math.max(
       1,
       Math.min(99, Number(combat.acc > 99n ? 99n : combat.acc) + luckBonus)
     );
 
-    const missed = Math.random() * 100 >= hitChance;
+    const missed = frozen || newPlayerHp <= 0n ||
+      Math.random() * 100 >= hitChance;
     const critical = !missed &&
       Math.random() * 100 <
       Math.max(0, Math.min(95, Number(combat.crit > 95n ? 95n : combat.crit)));
@@ -616,8 +682,8 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     let damage = 0n;
 
     if (!missed) {
-      damage = combat.atk +
-        (critical ? combat.atk * combat.critDmg / 100n : 0n);
+      damage = effectiveAtk +
+        (critical ? effectiveAtk * combat.critDmg / 100n : 0n);
 
       const defenseAfterPen = bossDefense > combat.pen
         ? bossDefense - combat.pen
@@ -628,30 +694,140 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
         : 1n;
     }
 
+    if (bossShielded) damage = damage / 2n;
     if (damage > oldBossHp) damage = oldBossHp;
 
-    const newBossHp = oldBossHp - damage;
+    let newBossHp = oldBossHp - damage;
     const defeated = newBossHp === 0n ? 1 : 0;
 
     const speedBonus = combat.spd >= 200n ? 20 : Number(combat.spd / 10n);
+    const evasionPenalty = slowed ? 25 : 0;
 
     const evasionChance = Math.max(
       0,
-      Math.min(95, Number(combat.evade > 95n ? 95n : combat.evade) + speedBonus)
+      Math.min(
+        95,
+        Number(combat.evade > 95n ? 95n : combat.evade) +
+          speedBonus - evasionPenalty
+      )
     );
 
-    const evaded = newBossHp > 0n && Math.random() * 100 < evasionChance;
-    const rawBossDamage = 100n;
+    const evaded = newBossHp > 0n && newPlayerHp > 0n &&
+      Math.random() * 100 < evasionChance;
 
-    const bossDamage = newBossHp === 0n || evaded
+    const minBossDamage = BigInt(Math.max(1, Number(bossData.minDamage) || 30000));
+    const maxBossDamage = BigInt(Math.max(
+      Number(minBossDamage),
+      Number(bossData.maxDamage) || 100000
+    ));
+    const rawBossDamage = minBossDamage +
+      BigInt(Math.floor(Math.random() *
+        (Number(maxBossDamage - minBossDamage) + 1)));
+
+    const bossDamage = newBossHp === 0n || evaded || newPlayerHp <= 0n
       ? 0n
-      : (rawBossDamage > combat.def ? rawBossDamage - combat.def : 1n);
+      : (rawBossDamage > effectiveDef ? rawBossDamage - effectiveDef : 1n);
 
-    let newPlayerHp = oldPlayerHp > bossDamage
-      ? oldPlayerHp - bossDamage
+    newPlayerHp = newPlayerHp > bossDamage
+      ? newPlayerHp - bossDamage
       : 0n;
 
-    const healing = damage * combat.life / 100n + combat.regen;
+    // 보스마다 등록된 두 능력 중 하나를 25% 확률로 발동한다.
+    let bossSkill = null;
+    const statusMessages = [];
+
+    if (
+      newBossHp > 0n &&
+      newPlayerHp > 0n &&
+      Array.isArray(bossData.skills) &&
+      bossData.skills.length > 0 &&
+      Math.random() < 0.25
+    ) {
+      const skill = bossData.skills[
+        Math.floor(Math.random() * bossData.skills.length)
+      ];
+      bossSkill = {
+        name: skill.name,
+        description: skill.description,
+        type: skill.type
+      };
+
+      const dotDamage = BigInt(Math.max(
+        1,
+        Math.floor((Number(bossData.minDamage) || 30000) / 10)
+      ));
+
+      switch (skill.type) {
+        case "freeze":
+          playerStatus.freezeTurns = Math.max(
+            Number(playerStatus.freezeTurns || 0), 3
+          );
+          statusMessages.push("빙결: 다음 3턴 동안 공격할 수 없어.");
+          break;
+
+        case "burn":
+        case "poison":
+          playerStatus[`${skill.type}Turns`] = 3;
+          playerStatus[`${skill.type}Damage`] = dotDamage.toString();
+          statusMessages.push(
+            `${skill.type === "burn" ? "화상" : "중독"}: 3턴 동안 지속 피해를 받아.`
+          );
+          break;
+
+        case "weaken":
+          playerStatus.weakenTurns = 3;
+          statusMessages.push("약화: 3턴 동안 공격력이 감소해.");
+          break;
+
+        case "defenseDown":
+          playerStatus.defenseDownTurns = 3;
+          statusMessages.push("방어 약화: 3턴 동안 방어력이 감소해.");
+          break;
+
+        case "slow":
+          playerStatus.slowTurns = 3;
+          statusMessages.push("둔화: 3턴 동안 회피 능력이 감소해.");
+          break;
+
+        case "healBlock":
+          playerStatus.healBlockTurns = 3;
+          statusMessages.push("회복 봉쇄: 3턴 동안 체력을 회복할 수 없어.");
+          break;
+
+        case "shield":
+          playerStatus.bossShieldTurns = 2;
+          statusMessages.push("보호막: 다음 2턴 동안 보스가 받는 피해가 절반이 돼.");
+          break;
+
+        case "drain": {
+          const extra = BigInt(Math.max(
+            1,
+            Math.floor((Number(bossData.minDamage) || 30000) / 2)
+          ));
+          newPlayerHp = newPlayerHp > extra ? newPlayerHp - extra : 0n;
+          statusMessages.push(`추가 피해 ${extra.toString()}을 받았어.`);
+          break;
+        }
+
+        case "bossHeal": {
+          const recovery = bossMax / 100n > 0n ? bossMax / 100n : 1n;
+          newBossHp = newBossHp + recovery > bossMax
+            ? bossMax
+            : newBossHp + recovery;
+          statusMessages.push("보스가 최대 체력의 1%를 회복했어.");
+          break;
+        }
+
+        case "confuse":
+          playerStatus.confuseTurns = 3;
+          statusMessages.push("혼란: 3턴 동안 공격력과 방어력이 감소해.");
+          break;
+      }
+    }
+
+    const healing = !healBlocked && newPlayerHp > 0n
+      ? damage * combat.life / 100n + combat.regen
+      : 0n;
 
     if (healing > 0n && newPlayerHp > 0n) {
       const maxHp = safeBigInt(state.max_hp);
@@ -677,9 +853,16 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     );
 
     await client.query(
-      `UPDATE boss_player_states SET current_hp = $1
-       WHERE cycle_key = $2 AND boss_id = $3 AND player_id = $4`,
-      [newPlayerHp.toString(), cycle, bossId, playerId]
+      `UPDATE boss_player_states
+       SET current_hp = $1, status_json = $2
+       WHERE cycle_key = $3 AND boss_id = $4 AND player_id = $5`,
+      [
+        newPlayerHp.toString(),
+        JSON.stringify(playerStatus),
+        cycle,
+        bossId,
+        playerId
+      ]
     );
 
     await client.query(
@@ -705,6 +888,10 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
       playerMaxHp: state.max_hp,
       bossDamage: bossDamage.toString(),
       evaded,
+      statusDamage: statusDamage.toString(),
+      bossSkill,
+      statusMessages,
+      statusEffects: playerStatus,
       healing: healing.toString(),
       contribution: totalDamage.toString(),
       combatStats: Object.fromEntries(
@@ -722,6 +909,7 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     client.release();
   }
 });
+
 // 플레이어 등록 및 최신 분신 능력치 저장
 app.post("/api/register", async (req, res) => {
   try {
@@ -911,6 +1099,7 @@ app.get("/api/match/:id", (req, res) => {
   matches.delete(req.params.id);
   res.json({ match });
 });
+
 // PvP 랭킹
 app.get("/api/rankings", async (req, res) => {
   try {
