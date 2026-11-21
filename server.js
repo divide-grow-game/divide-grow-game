@@ -268,24 +268,22 @@ function safeBigInt(value, fallback = 0n) {
   }
 }
 function getBossCycle() {
-  const now = new Date();
-  const korea = new Date(
-    now.toLocaleString("en-US", { timeZone: "Asia/Seoul" })
-  );
+  // 서버 시간대와 관계없이 한국 시간(KST)을 기준으로 계산
+  const koreaTime = new Date(Date.now() + 9 * 60 * 60 * 1000);
 
-  const hour = korea.getHours();
-  const start = new Date(korea);
+  const year = koreaTime.getUTCFullYear();
+  const month = koreaTime.getUTCMonth();
+  const date = koreaTime.getUTCDate();
+  const hour = koreaTime.getUTCHours();
 
-  if (hour < 10) {
-    start.setDate(start.getDate() - 1);
-    start.setHours(22, 0, 0, 0);
-  } else if (hour < 22) {
-    start.setHours(10, 0, 0, 0);
-  } else {
-    start.setHours(22, 0, 0, 0);
-  }
+  // 한국 시간 오전 10시~오후 10시 / 오후 10시~다음 날 오전 10시
+  const startHour = hour < 10 ? -2 : hour < 22 ? 10 : 22;
 
-  return start.toISOString();
+  // 한국 시간 기준 시작 시각을 UTC로 변환
+  return new Date(
+    Date.UTC(year, month, date, startHour, 0, 0) -
+    9 * 60 * 60 * 1000
+  ).toISOString();
 }
 
 async function ensureBosses(client = pool) {
