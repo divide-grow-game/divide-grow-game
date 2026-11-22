@@ -1,3 +1,4 @@
+
 const express = require("express");
 const { Pool } = require("pg");
 const http = require("http");
@@ -222,13 +223,12 @@ const BOSS_DATA = {
   }
 };
 
-
 const ALLOWED_STATS = [
   "hp", "atk", "def", "spd", "crit", "critDmg",
   "acc", "evade", "pen", "life", "regen", "luck"
 ];
 
-// 보스전 테스트 모드: 테스트가 끝나면 false로 변경할 것
+// 보스전 테스트 모드
 const BOSS_TEST_MODE = true;
 const BOSS_TEST_HP = 1000000000000n;
 
@@ -273,7 +273,6 @@ function safeBigInt(value, fallback = 0n) {
 }
 
 function getBossCycle() {
-  // 서버 시간대와 관계없이 한국 시간(KST)을 기준으로 계산
   const koreaTime = new Date(Date.now() + 9 * 60 * 60 * 1000);
 
   const year = koreaTime.getUTCFullYear();
@@ -281,10 +280,8 @@ function getBossCycle() {
   const date = koreaTime.getUTCDate();
   const hour = koreaTime.getUTCHours();
 
-  // 한국 시간 기준 오전 10시 / 오후 10시 주기
   const startHour = hour < 10 ? -2 : hour < 22 ? 10 : 22;
 
-  // 한국 시간 기준 시작 시각을 UTC로 변환
   return new Date(
     Date.UTC(year, month, date, startHour, 0, 0) -
     9 * 60 * 60 * 1000
@@ -405,7 +402,6 @@ app.get("/", (req, res) => {
   res.send("분신 키우기 서버 실행 중!");
 });
 
-// 현재 공용 보스 3종 조회
 app.get("/api/bosses", async (req, res) => {
   try {
     const cycle = await ensureBosses();
@@ -433,7 +429,6 @@ app.get("/api/bosses", async (req, res) => {
   }
 });
 
-// 보스전 입장 및 플레이어 체력 불러오기
 app.post("/api/bosses/:bossId/join", async (req, res) => {
   try {
     const playerId = String(req.body.id || "");
@@ -473,7 +468,6 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
     let state = stateResult.rows[0];
 
     if (BOSS_TEST_MODE) {
-      // 테스트 모드에서는 보스에 입장할 때마다 체력과 상태 효과를 초기화
       await pool.query(
         `INSERT INTO boss_player_states
           (cycle_key, boss_id, player_id, current_hp, max_hp, status_json)
@@ -597,10 +591,30 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
       return res.status(400).json({ error: "먼저 보스전에 입장해 줘." });
     }
 
+    // 테스트 모드에서는 기존 체력 저장값을 검사하고 필요하면 1조로 복구
+    if (BOSS_TEST_MODE) {
+      const savedHp = safeBigInt(state.current_hp);
+      const savedMaxHp = safeBigInt(state.max_hp);
+
+      if (savedHp <= 0n || savedMaxHp !== BOSS_TEST_HP) {
+        await client.query(
+          `UPDATE boss_player_states
+           SET current_hp = $1, max_hp = $1
+           WHERE cycle_key = $2 AND boss_id = $3 AND player_id = $4`,
+          [BOSS_TEST_HP.toString(), cycle, bossId, playerId]
+        );
+
+        state.current_hp = BOSS_TEST_HP.toString();
+        state.max_hp = BOSS_TEST_HP.toString();
+      }
+    }
+
     let playerStatus = {};
 
     try {
-      playerStatus = JSON.parse(state.status_json || "{}");
+      playerStatus = typeof state.status_json === "string"
+        ? JSON.parse(state.status_json || "{}")
+        : (state.status_json || {});
     } catch {
       playerStatus = {};
     }
@@ -608,7 +622,7 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     if (safeBigInt(state.current_hp) <= 0n) {
       await client.query("ROLLBACK");
       return res.status(400).json({
-        error: "체력이 모두 소진됐어. 이번 주기의 보스전은 더 진행할 수 없어."
+        error: "체력이 모두 소진됐어. 보스전에 다시 입장해 줘."
       });
     }
 
@@ -647,7 +661,6 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     const bossDefense = 10n;
     const luckBonus = combat.luck >= 1000n ? 10 : Number(combat.luck / 100n);
 
-    // 기존 지속 피해를 먼저 적용하고 남은 턴을 줄인다.
     let statusDamage = 0n;
     for (const effect of ["burn", "poison"]) {
       const turnsKey = `${effect}Turns`;
@@ -665,7 +678,6 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
       ? oldPlayerHp - statusDamage
       : 0n;
 
-    // 상태 이상에 따라 플레이어 능력치를 조정한다.
     const frozen = Number(playerStatus.freezeTurns || 0) > 0;
     if (frozen) playerStatus.freezeTurns--;
 
@@ -756,7 +768,6 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
       ? newPlayerHp - bossDamage
       : 0n;
 
-    // 보스마다 등록된 두 능력 중 하나를 25% 확률로 발동한다.
     let bossSkill = null;
     const statusMessages = [];
 
@@ -861,6 +872,12 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
         : newPlayerHp + healing;
     }
 
+    // 테스트 모드에서는 체력이 0이 되더라도 즉시 1조로 복구
+    // 따라서 프런트엔드에서도 플레이어가 전투 불능 상태가 되지 않아
+    if (BOSS_TEST_MODE && newPlayerHp <= 0n) {
+      newPlayerHp = BOSS_TEST_HP;
+    }
+
     const contributionResult = await client.query(
       `SELECT damage FROM boss_contributions
        WHERE cycle_key = $1 AND boss_id = $2 AND player_id = $3 FOR UPDATE`,
@@ -878,10 +895,11 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
 
     await client.query(
       `UPDATE boss_player_states
-       SET current_hp = $1, status_json = $2
-       WHERE cycle_key = $3 AND boss_id = $4 AND player_id = $5`,
+       SET current_hp = $1, max_hp = $2, status_json = $3
+       WHERE cycle_key = $4 AND boss_id = $5 AND player_id = $6`,
       [
         newPlayerHp.toString(),
+        BOSS_TEST_MODE ? BOSS_TEST_HP.toString() : state.max_hp,
         JSON.stringify(playerStatus),
         cycle,
         bossId,
@@ -909,7 +927,7 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
       critical,
       missed,
       playerHp: newPlayerHp.toString(),
-      playerMaxHp: state.max_hp,
+      playerMaxHp: BOSS_TEST_MODE ? BOSS_TEST_HP.toString() : state.max_hp,
       bossDamage: bossDamage.toString(),
       evaded,
       statusDamage: statusDamage.toString(),
