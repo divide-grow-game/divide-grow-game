@@ -228,6 +228,10 @@ const ALLOWED_STATS = [
   "acc", "evade", "pen", "life", "regen", "luck"
 ];
 
+// 보스전 테스트 모드: 테스트가 끝나면 false로 변경할 것
+const BOSS_TEST_MODE = true;
+const BOSS_TEST_HP = 1000000000000n;
+
 function toPlayer(row) {
   if (!row) return null;
   let stats = {};
@@ -267,6 +271,7 @@ function safeBigInt(value, fallback = 0n) {
     return fallback;
   }
 }
+
 function getBossCycle() {
   // 서버 시간대와 관계없이 한국 시간(KST)을 기준으로 계산
   const koreaTime = new Date(Date.now() + 9 * 60 * 60 * 1000);
@@ -276,7 +281,7 @@ function getBossCycle() {
   const date = koreaTime.getUTCDate();
   const hour = koreaTime.getUTCHours();
 
-  // 한국 시간 오전 10시~오후 10시 / 오후 10시~다음 날 오전 10시
+  // 한국 시간 기준 오전 10시 / 오후 10시 주기
   const startHour = hour < 10 ? -2 : hour < 22 ? 10 : 22;
 
   // 한국 시간 기준 시작 시각을 UTC로 변환
@@ -321,6 +326,7 @@ async function ensureBosses(client = pool) {
 
   return cycle;
 }
+
 async function initialiseDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS players (
@@ -453,7 +459,9 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
       return res.status(400).json({ error: "전투할 수 없는 보스야." });
     }
 
-    let maxHpValue = safeBigInt(player.stats?.hp || "1000", 1000n);
+    let maxHpValue = BOSS_TEST_MODE
+      ? BOSS_TEST_HP
+      : safeBigInt(player.stats?.hp || "1000", 1000n);
     if (maxHpValue < 1n) maxHpValue = 1n;
     const maxHp = maxHpValue.toString();
 
@@ -464,7 +472,25 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
     );
     let state = stateResult.rows[0];
 
-    if (!state) {
+    if (BOSS_TEST_MODE) {
+      // 테스트 모드에서는 보스에 입장할 때마다 체력과 상태 효과를 초기화
+      await pool.query(
+        `INSERT INTO boss_player_states
+          (cycle_key, boss_id, player_id, current_hp, max_hp, status_json)
+         VALUES ($1, $2, $3, $4, $4, '{}')
+         ON CONFLICT (cycle_key, boss_id, player_id)
+         DO UPDATE SET current_hp = EXCLUDED.current_hp,
+                       max_hp = EXCLUDED.max_hp,
+                       status_json = '{}'`,
+        [cycle, bossId, playerId, maxHp]
+      );
+
+      state = {
+        current_hp: maxHp,
+        max_hp: maxHp,
+        status_json: {}
+      };
+    } else if (!state) {
       await pool.query(
         `INSERT INTO boss_player_states
           (cycle_key, boss_id, player_id, current_hp, max_hp)
