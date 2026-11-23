@@ -373,6 +373,240 @@ async function initialiseDatabase() {
       max_hp TEXT NOT NULL,
       PRIMARY KEY (cycle_key, boss_id, player_id)
     );
+
+    -- 플레이어 재료 보관함
+    CREATE TABLE IF NOT EXISTS player_materials (
+      player_id TEXT NOT NULL,
+      material_id TEXT NOT NULL,
+      material_name TEXT NOT NULL,
+      quantity BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY (player_id, material_id)
+    );
+
+    -- 플레이어 물약 보관함
+    CREATE TABLE IF NOT EXISTS player_potions (
+      id BIGSERIAL PRIMARY KEY,
+      player_id TEXT NOT NULL,
+      potion_id TEXT NOT NULL,
+      potion_name TEXT NOT NULL,
+      tier INTEGER NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 0,
+      effects_json TEXT NOT NULL DEFAULT '{}',
+      duration_turns INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (player_id, potion_id)
+    );
+
+    -- 물약 제작 기록
+    CREATE TABLE IF NOT EXISTS potion_crafting_log (
+      id BIGSERIAL PRIMARY KEY,
+      player_id TEXT NOT NULL,
+      potion_id TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- 일일 퀘스트 목록
+    CREATE TABLE IF NOT EXISTS daily_quest_templates (
+      quest_id INTEGER PRIMARY KEY,
+      quest_name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      quest_type TEXT NOT NULL,
+      target_value BIGINT NOT NULL,
+      reward_json TEXT NOT NULL DEFAULT '{}'
+    );
+
+    -- 날짜별 플레이어 퀘스트
+    CREATE TABLE IF NOT EXISTS player_daily_quests (
+      player_id TEXT NOT NULL,
+      quest_date DATE NOT NULL,
+      quest_id INTEGER NOT NULL,
+      progress BIGINT NOT NULL DEFAULT 0,
+      completed BOOLEAN NOT NULL DEFAULT FALSE,
+      claimed BOOLEAN NOT NULL DEFAULT FALSE,
+      PRIMARY KEY (player_id, quest_date, quest_id)
+    );
+
+    -- 길드
+    CREATE TABLE IF NOT EXISTS guilds (
+      id BIGSERIAL PRIMARY KEY,
+      name VARCHAR(24) NOT NULL UNIQUE,
+      leader_id TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      level INTEGER NOT NULL DEFAULT 1,
+      experience BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- 길드 가입 정보
+    CREATE TABLE IF NOT EXISTS guild_members (
+      guild_id BIGINT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+      player_id TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL DEFAULT 'member',
+      contribution BIGINT NOT NULL DEFAULT 0,
+      joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (guild_id, player_id)
+    );
+
+    -- 길드 대항전
+    CREATE TABLE IF NOT EXISTS guild_battles (
+      id BIGSERIAL PRIMARY KEY,
+      guild_a BIGINT NOT NULL REFERENCES guilds(id),
+      guild_b BIGINT NOT NULL REFERENCES guilds(id),
+      status TEXT NOT NULL DEFAULT 'waiting',
+      score_a BIGINT NOT NULL DEFAULT 0,
+      score_b BIGINT NOT NULL DEFAULT 0,
+      winner_guild BIGINT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ended_at TIMESTAMPTZ
+    );
+
+    -- 길드 전용 보스
+    CREATE TABLE IF NOT EXISTS guild_bosses (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id BIGINT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+      boss_name TEXT NOT NULL,
+      max_hp TEXT NOT NULL,
+      current_hp TEXT NOT NULL,
+      defeated BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- 길드 보스 기여도
+    CREATE TABLE IF NOT EXISTS guild_boss_contributions (
+      boss_id BIGINT NOT NULL REFERENCES guild_bosses(id) ON DELETE CASCADE,
+      player_id TEXT NOT NULL,
+      damage TEXT NOT NULL DEFAULT '0',
+      PRIMARY KEY (boss_id, player_id)
+    );
+
+    -- 던전 진행 기록
+    CREATE TABLE IF NOT EXISTS dungeon_runs (
+      id BIGSERIAL PRIMARY KEY,
+      player_id TEXT NOT NULL,
+      dungeon_level BIGINT NOT NULL,
+      current_round INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'active',
+      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      finished_at TIMESTAMPTZ
+    );
+
+    -- 파티
+    CREATE TABLE IF NOT EXISTS parties (
+      id BIGSERIAL PRIMARY KEY,
+      leader_id TEXT NOT NULL,
+      party_type TEXT NOT NULL DEFAULT 'battle',
+      status TEXT NOT NULL DEFAULT 'recruiting',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- 파티원
+    CREATE TABLE IF NOT EXISTS party_members (
+      party_id BIGINT NOT NULL REFERENCES parties(id) ON DELETE CASCADE,
+      player_id TEXT NOT NULL UNIQUE,
+      joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (party_id, player_id)
+    );
+
+    -- 파티 전투 기록
+    CREATE TABLE IF NOT EXISTS party_battles (
+      id BIGSERIAL PRIMARY KEY,
+      party_id BIGINT NOT NULL REFERENCES parties(id),
+      battle_type TEXT NOT NULL,
+      target_level BIGINT,
+      current_round INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'active',
+      reward_json TEXT NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- 온라인 PvP 전투 기록
+    CREATE TABLE IF NOT EXISTS pvp_battles (
+      id BIGSERIAL PRIMARY KEY,
+      player_a TEXT NOT NULL,
+      player_b TEXT NOT NULL,
+      winner_id TEXT,
+      battle_log JSONB NOT NULL DEFAULT '[]',
+      reward_json JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_daily_quests_player_date
+      ON player_daily_quests(player_id, quest_date);
+
+    CREATE INDEX IF NOT EXISTS idx_guild_members_guild
+      ON guild_members(guild_id);
+
+    CREATE INDEX IF NOT EXISTS idx_guilds_level
+      ON guilds(level DESC, experience DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_dungeon_player
+      ON dungeon_runs(player_id, started_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_pvp_battles_players
+      ON pvp_battles(player_a, player_b);
+  `);
+
+  await pool.query(`
+    ALTER TABLE boss_player_states
+    ADD COLUMN IF NOT EXISTS status_json TEXT NOT NULL DEFAULT '{}'
+  `);
+
+  const result = await pool.query(
+    'SELECT id, name, "heroName", rank, power, wins, stats_json FROM players'
+  );
+
+  players.clear();
+
+  for (const row of result.rows) {
+    const player = toPlayer(row);
+    if (player) players.set(player.id, player);
+  }
+
+  await ensureBosses();
+
+  console.log(
+    \`PostgreSQL 연결 완료: 플레이어 \${players.size}명 불러옴\`
+  );
+}
+
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS "heroName" TEXT;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS rank INTEGER;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS power TEXT;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS wins INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS stats_json TEXT NOT NULL DEFAULT '{}';
+
+    CREATE TABLE IF NOT EXISTS boss_cycles (
+      cycle_key TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS world_bosses (
+      cycle_key TEXT NOT NULL,
+      boss_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      max_hp TEXT NOT NULL,
+      current_hp TEXT NOT NULL,
+      defeated INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (cycle_key, boss_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS boss_contributions (
+      cycle_key TEXT NOT NULL,
+      boss_id INTEGER NOT NULL,
+      player_id TEXT NOT NULL,
+      damage TEXT NOT NULL DEFAULT '0',
+      PRIMARY KEY (cycle_key, boss_id, player_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS boss_player_states (
+      cycle_key TEXT NOT NULL,
+      boss_id INTEGER NOT NULL,
+      player_id TEXT NOT NULL,
+      current_hp TEXT NOT NULL,
+      max_hp TEXT NOT NULL,
+      PRIMARY KEY (cycle_key, boss_id, player_id)
+    );
   `);
 
   await pool.query(`
