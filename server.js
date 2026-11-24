@@ -1,4 +1,3 @@
-
 const express = require("express");
 const { Pool } = require("pg");
 const http = require("http");
@@ -234,7 +233,9 @@ const BOSS_TEST_HP = 1000000000000n;
 
 function toPlayer(row) {
   if (!row) return null;
+
   let stats = {};
+
   try {
     stats = typeof row.stats_json === "string"
       ? JSON.parse(row.stats_json || "{}")
@@ -259,8 +260,11 @@ async function getPlayer(id) {
     'SELECT id, name, "heroName", rank, power, wins, stats_json FROM players WHERE id = $1',
     [String(id || "")]
   );
+
   const player = toPlayer(result.rows[0]);
+
   if (player) players.set(player.id, player);
+
   return player;
 }
 
@@ -270,6 +274,124 @@ function safeBigInt(value, fallback = 0n) {
   } catch {
     return fallback;
   }
+}
+
+// 100,000종 재료 생성 규칙
+const MATERIAL_PREFIX_A = [
+  "태초", "고대", "찬란", "영원", "심연",
+  "차원", "신성", "혼돈", "별빛", "은하"
+];
+
+const MATERIAL_PREFIX_B = [
+  "붉은", "푸른", "검은", "하얀", "황금빛",
+  "은빛", "수정빛", "불멸한", "성스러운", "저주받은"
+];
+
+const MATERIAL_CORE_A = [
+  "불꽃", "서리", "번개", "바람", "대지",
+  "바다", "달", "태양", "별", "그림자"
+];
+
+const MATERIAL_CORE_B = [
+  "철", "구리", "은", "금", "수정",
+  "마력", "정령", "용", "운석", "생명"
+];
+
+const MATERIAL_FORMS = [
+  "조각", "파편", "가루", "결정", "핵",
+  "정수", "씨앗", "룬", "인장", "보석"
+];
+
+const MATERIAL_TOTAL = 100000;
+const MATERIAL_MAX_STAGE = 10000000;
+
+function materialInfo(id) {
+  id = Number(id);
+
+  if (!Number.isInteger(id) || id < 1 || id > MATERIAL_TOTAL) {
+    return null;
+  }
+
+  const n = id - 1;
+  const prefixIndex = Math.floor(n / 1000);
+  const coreIndex = Math.floor(n / 10) % 100;
+  const formIndex = n % 10;
+
+  const prefix =
+    MATERIAL_PREFIX_A[Math.floor(prefixIndex / 10)] +
+    "의 " +
+    MATERIAL_PREFIX_B[prefixIndex % 10];
+
+  const core =
+    MATERIAL_CORE_A[Math.floor(coreIndex / 10)] +
+    MATERIAL_CORE_B[coreIndex % 10];
+
+  const startStage = 1 + Math.floor(n * 100);
+
+  const endStage = Math.min(
+    MATERIAL_MAX_STAGE,
+    startStage + 100 + (n % 5) * 20
+  );
+
+  const price = 5 + Math.floor(
+    Math.pow(startStage / 100 + 1, 1.12)
+  );
+
+  const rarity =
+    startStage < 10000 ? "일반" :
+    startStage < 100000 ? "고급" :
+    startStage < 1000000 ? "희귀" :
+    startStage < 5000000 ? "영웅" :
+    "전설";
+
+  return {
+    id,
+    name: `${prefix} ${core} ${MATERIAL_FORMS[formIndex]}`,
+    startStage,
+    endStage,
+    price,
+    rarity
+  };
+}
+
+function createBossMaterialDrops(bossId) {
+  const stage = Math.min(
+    MATERIAL_MAX_STAGE,
+    1000000 + Number(bossId) * 1000000
+  );
+
+  const center = Math.floor((stage - 1) / 100);
+  const candidates = [];
+
+  for (
+    let n = Math.max(0, center - 10);
+    n <= Math.min(MATERIAL_TOTAL - 1, center + 10);
+    n++
+  ) {
+    const material = materialInfo(n + 1);
+
+    if (
+      material.endStage >= stage - 500 &&
+      material.startStage <= stage + 500
+    ) {
+      candidates.push(material);
+    }
+  }
+
+  const drops = [];
+
+  for (let i = 0; i < 2 && candidates.length > 0; i++) {
+    const index = Math.floor(Math.random() * candidates.length);
+    const material = candidates.splice(index, 1)[0];
+
+    drops.push({
+      id: material.id,
+      name: material.name,
+      quantity: 3 + Math.floor(Math.random() * 8)
+    });
+  }
+
+  return drops;
 }
 
 function getBossCycle() {
@@ -290,6 +412,7 @@ function getBossCycle() {
 
 async function ensureBosses(client = pool) {
   const cycle = getBossCycle();
+
   const existing = await client.query(
     "SELECT COUNT(*)::int AS count FROM world_bosses WHERE cycle_key = $1",
     [cycle]
@@ -381,6 +504,16 @@ async function initialiseDatabase() {
       material_name TEXT NOT NULL,
       quantity BIGINT NOT NULL DEFAULT 0,
       PRIMARY KEY (player_id, material_id)
+    );
+
+    -- 보스 보상 중복 지급 방지
+    CREATE TABLE IF NOT EXISTS boss_material_rewards (
+      cycle_key TEXT NOT NULL,
+      boss_id INTEGER NOT NULL,
+      player_id TEXT NOT NULL,
+      reward_json JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (cycle_key, boss_id, player_id)
     );
 
     -- 플레이어 물약 보관함
@@ -566,68 +699,6 @@ async function initialiseDatabase() {
   await ensureBosses();
 
   console.log(
-    \`PostgreSQL 연결 완료: 플레이어 \${players.size}명 불러옴\`
-  );
-}
-
-    ALTER TABLE players ADD COLUMN IF NOT EXISTS "heroName" TEXT;
-    ALTER TABLE players ADD COLUMN IF NOT EXISTS rank INTEGER;
-    ALTER TABLE players ADD COLUMN IF NOT EXISTS power TEXT;
-    ALTER TABLE players ADD COLUMN IF NOT EXISTS wins INTEGER NOT NULL DEFAULT 0;
-    ALTER TABLE players ADD COLUMN IF NOT EXISTS stats_json TEXT NOT NULL DEFAULT '{}';
-
-    CREATE TABLE IF NOT EXISTS boss_cycles (
-      cycle_key TEXT PRIMARY KEY,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS world_bosses (
-      cycle_key TEXT NOT NULL,
-      boss_id INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      max_hp TEXT NOT NULL,
-      current_hp TEXT NOT NULL,
-      defeated INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (cycle_key, boss_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS boss_contributions (
-      cycle_key TEXT NOT NULL,
-      boss_id INTEGER NOT NULL,
-      player_id TEXT NOT NULL,
-      damage TEXT NOT NULL DEFAULT '0',
-      PRIMARY KEY (cycle_key, boss_id, player_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS boss_player_states (
-      cycle_key TEXT NOT NULL,
-      boss_id INTEGER NOT NULL,
-      player_id TEXT NOT NULL,
-      current_hp TEXT NOT NULL,
-      max_hp TEXT NOT NULL,
-      PRIMARY KEY (cycle_key, boss_id, player_id)
-    );
-  `);
-
-  await pool.query(`
-    ALTER TABLE boss_player_states
-    ADD COLUMN IF NOT EXISTS status_json TEXT NOT NULL DEFAULT '{}'
-  `);
-
-  const result = await pool.query(
-    'SELECT id, name, "heroName", rank, power, wins, stats_json FROM players'
-  );
-
-  players.clear();
-
-  for (const row of result.rows) {
-    const player = toPlayer(row);
-    if (player) players.set(player.id, player);
-  }
-
-  await ensureBosses();
-
-  console.log(
     `PostgreSQL 연결 완료: 플레이어 ${players.size}명 불러옴`
   );
 }
@@ -639,6 +710,7 @@ app.get("/", (req, res) => {
 app.get("/api/bosses", async (req, res) => {
   try {
     const cycle = await ensureBosses();
+
     const result = await pool.query(
       `SELECT boss_id, name, max_hp, current_hp, defeated
        FROM world_bosses
@@ -663,6 +735,131 @@ app.get("/api/bosses", async (req, res) => {
   }
 });
 
+// 저장된 재료 보관함 불러오기
+app.get("/api/materials/:playerId", async (req, res) => {
+  try {
+    const playerId = String(req.params.playerId || "");
+    const player = await getPlayer(playerId);
+
+    if (!player) {
+      return res.status(404).json({
+        error: "플레이어를 찾을 수 없어."
+      });
+    }
+
+    const result = await pool.query(
+      `SELECT material_id, quantity
+       FROM player_materials
+       WHERE player_id = $1 AND quantity > 0`,
+      [playerId]
+    );
+
+    const materials = {};
+
+    for (const row of result.rows) {
+      materials[row.material_id] = Number(row.quantity);
+    }
+
+    res.json({
+      success: true,
+      materials
+    });
+  } catch (error) {
+    console.error("재료 불러오기 오류:", error);
+    res.status(500).json({
+      error: "재료를 불러오지 못했어."
+    });
+  }
+});
+
+// 로컬 재료 보관함을 서버에 동기화
+app.post("/api/materials/sync", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const playerId = String(req.body.id || "");
+    const materials = req.body.materials;
+
+    if (
+      !playerId ||
+      !materials ||
+      typeof materials !== "object" ||
+      Array.isArray(materials)
+    ) {
+      return res.status(400).json({
+        error: "재료 정보가 올바르지 않아."
+      });
+    }
+
+    if (Object.keys(materials).length > 2000) {
+      return res.status(400).json({
+        error: "재료 종류가 너무 많아."
+      });
+    }
+
+    const player = await getPlayer(playerId);
+
+    if (!player) {
+      return res.status(404).json({
+        error: "플레이어를 찾을 수 없어."
+      });
+    }
+
+    await client.query("BEGIN");
+
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtext($1))",
+      [playerId]
+    );
+
+    await client.query(
+      "DELETE FROM player_materials WHERE player_id = $1",
+      [playerId]
+    );
+
+    for (const [id, rawQuantity] of Object.entries(materials)) {
+      const material = materialInfo(id);
+      const quantity = Math.floor(Number(rawQuantity));
+
+      if (
+        !material ||
+        !Number.isSafeInteger(quantity) ||
+        quantity <= 0
+      ) {
+        continue;
+      }
+
+      await client.query(
+        `INSERT INTO player_materials
+          (player_id, material_id, material_name, quantity)
+         VALUES ($1, $2, $3, $4)`,
+        [
+          playerId,
+          String(material.id),
+          material.name,
+          quantity
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    res.json({ success: true });
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+
+    console.error("재료 동기화 오류:", error);
+
+    res.status(500).json({
+      error: "재료를 저장하지 못했어."
+    });
+  } finally {
+    client.release();
+  }
+});
+
 app.post("/api/bosses/:bossId/join", async (req, res) => {
   try {
     const playerId = String(req.body.id || "");
@@ -670,28 +867,39 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
     const player = await getPlayer(playerId);
 
     if (!player) {
-      return res.status(404).json({ error: "먼저 온라인 서버에 접속해 줘." });
+      return res.status(404).json({
+        error: "먼저 온라인 서버에 접속해 줘."
+      });
     }
+
     if (!Number.isInteger(bossId) || bossId < 1 || bossId > 3) {
-      return res.status(400).json({ error: "잘못된 보스 번호야." });
+      return res.status(400).json({
+        error: "잘못된 보스 번호야."
+      });
     }
 
     const cycle = await ensureBosses();
+
     const bossResult = await pool.query(
       `SELECT * FROM world_bosses
        WHERE cycle_key = $1 AND boss_id = $2`,
       [cycle, bossId]
     );
+
     const boss = bossResult.rows[0];
 
     if (!boss || Number(boss.defeated) === 1) {
-      return res.status(400).json({ error: "전투할 수 없는 보스야." });
+      return res.status(400).json({
+        error: "전투할 수 없는 보스야."
+      });
     }
 
     let maxHpValue = BOSS_TEST_MODE
       ? BOSS_TEST_HP
       : safeBigInt(player.stats?.hp || "1000", 1000n);
+
     if (maxHpValue < 1n) maxHpValue = 1n;
+
     const maxHp = maxHpValue.toString();
 
     let stateResult = await pool.query(
@@ -699,6 +907,7 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
        WHERE cycle_key = $1 AND boss_id = $2 AND player_id = $3`,
       [cycle, bossId, playerId]
     );
+
     let state = stateResult.rows[0];
 
     if (BOSS_TEST_MODE) {
@@ -732,6 +941,7 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
          WHERE cycle_key = $1 AND boss_id = $2 AND player_id = $3`,
         [cycle, bossId, playerId]
       );
+
       state = stateResult.rows[0];
     } else if (state.max_hp === "1000") {
       const oldCurrent = safeBigInt(state.current_hp);
@@ -740,7 +950,13 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
       await pool.query(
         `UPDATE boss_player_states SET current_hp = $1, max_hp = $2
          WHERE cycle_key = $3 AND boss_id = $4 AND player_id = $5`,
-        [migratedCurrent.toString(), maxHp, cycle, bossId, playerId]
+        [
+          migratedCurrent.toString(),
+          maxHp,
+          cycle,
+          bossId,
+          playerId
+        ]
       );
 
       state = {
@@ -772,7 +988,10 @@ app.post("/api/bosses/:bossId/join", async (req, res) => {
     });
   } catch (error) {
     console.error("보스전 입장 오류:", error);
-    res.status(500).json({ error: "보스전 입장에 실패했어." });
+
+    res.status(500).json({
+      error: "보스전 입장에 실패했어."
+    });
   }
 });
 
@@ -785,15 +1004,21 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     const bossId = Number(req.params.bossId);
 
     if (!Number.isInteger(bossId) || bossId < 1 || bossId > 3) {
-      return res.status(400).json({ error: "잘못된 보스 번호야." });
+      return res.status(400).json({
+        error: "잘못된 보스 번호야."
+      });
     }
 
     const player = await getPlayer(playerId);
+
     if (!player) {
-      return res.status(404).json({ error: "플레이어를 찾을 수 없어." });
+      return res.status(404).json({
+        error: "플레이어를 찾을 수 없어."
+      });
     }
 
     const cycle = await ensureBosses(client);
+
     await client.query("BEGIN");
 
     const bossResult = await client.query(
@@ -801,16 +1026,24 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
        WHERE cycle_key = $1 AND boss_id = $2 FOR UPDATE`,
       [cycle, bossId]
     );
+
     const boss = bossResult.rows[0];
 
     if (!boss) {
       await client.query("ROLLBACK");
-      return res.status(404).json({ error: "보스를 찾을 수 없어." });
+
+      return res.status(404).json({
+        error: "보스를 찾을 수 없어."
+      });
     }
 
     if (Number(boss.defeated) === 1) {
       await client.query("ROLLBACK");
-      return res.json({ success: false, message: "이미 쓰러진 보스야." });
+
+      return res.json({
+        success: false,
+        message: "이미 쓰러진 보스야."
+      });
     }
 
     const stateResult = await client.query(
@@ -818,11 +1051,15 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
        WHERE cycle_key = $1 AND boss_id = $2 AND player_id = $3 FOR UPDATE`,
       [cycle, bossId, playerId]
     );
+
     const state = stateResult.rows[0];
 
     if (!state) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ error: "먼저 보스전에 입장해 줘." });
+
+      return res.status(400).json({
+        error: "먼저 보스전에 입장해 줘."
+      });
     }
 
     // 테스트 모드에서는 기존 체력 저장값을 검사하고 필요하면 1조로 복구
@@ -835,7 +1072,12 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
           `UPDATE boss_player_states
            SET current_hp = $1, max_hp = $1
            WHERE cycle_key = $2 AND boss_id = $3 AND player_id = $4`,
-          [BOSS_TEST_HP.toString(), cycle, bossId, playerId]
+          [
+            BOSS_TEST_HP.toString(),
+            cycle,
+            bossId,
+            playerId
+          ]
         );
 
         state.current_hp = BOSS_TEST_HP.toString();
@@ -855,6 +1097,7 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
 
     if (safeBigInt(state.current_hp) <= 0n) {
       await client.query("ROLLBACK");
+
       return res.status(400).json({
         error: "체력이 모두 소진됐어. 보스전에 다시 입장해 줘."
       });
@@ -862,8 +1105,11 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
 
     const sourceStats = player.stats || {};
     const base = key => safeBigInt(sourceStats[key] ?? 0);
+
     const roll = key => {
-      const value = base(key) + BigInt(Math.floor(Math.random() * 61) - 30);
+      const value = base(key) +
+        BigInt(Math.floor(Math.random() * 61) - 30);
+
       return value > 0n ? value : 0n;
     };
 
@@ -893,18 +1139,31 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     const oldBossHp = safeBigInt(boss.current_hp);
     const oldPlayerHp = safeBigInt(state.current_hp);
     const bossDefense = 10n;
-    const luckBonus = combat.luck >= 1000n ? 10 : Number(combat.luck / 100n);
+
+    const luckBonus = combat.luck >= 1000n
+      ? 10
+      : Number(combat.luck / 100n);
 
     let statusDamage = 0n;
+
     for (const effect of ["burn", "poison"]) {
       const turnsKey = `${effect}Turns`;
       const damageKey = `${effect}Damage`;
-      const turns = Math.max(0, Number(playerStatus[turnsKey] || 0));
+      const turns = Math.max(
+        0,
+        Number(playerStatus[turnsKey] || 0)
+      );
 
       if (turns > 0) {
-        statusDamage += safeBigInt(playerStatus[damageKey] || 0);
+        statusDamage += safeBigInt(
+          playerStatus[damageKey] || 0
+        );
+
         playerStatus[turnsKey] = turns - 1;
-        if (playerStatus[turnsKey] === 0) delete playerStatus[damageKey];
+
+        if (playerStatus[turnsKey] === 0) {
+          delete playerStatus[damageKey];
+        }
       }
     }
 
@@ -918,7 +1177,9 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     const weakened = Number(playerStatus.weakenTurns || 0) > 0;
     if (weakened) playerStatus.weakenTurns--;
 
-    const defenseReduced = Number(playerStatus.defenseDownTurns || 0) > 0;
+    const defenseReduced =
+      Number(playerStatus.defenseDownTurns || 0) > 0;
+
     if (defenseReduced) playerStatus.defenseDownTurns--;
 
     const slowed = Number(playerStatus.slowTurns || 0) > 0;
@@ -927,33 +1188,53 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     const confused = Number(playerStatus.confuseTurns || 0) > 0;
     if (confused) playerStatus.confuseTurns--;
 
-    const healBlocked = Number(playerStatus.healBlockTurns || 0) > 0;
+    const healBlocked =
+      Number(playerStatus.healBlockTurns || 0) > 0;
+
     if (healBlocked) playerStatus.healBlockTurns--;
 
-    const bossShielded = Number(playerStatus.bossShieldTurns || 0) > 0;
+    const bossShielded =
+      Number(playerStatus.bossShieldTurns || 0) > 0;
+
     if (bossShielded) playerStatus.bossShieldTurns--;
 
     const effectiveAtk = combat.atk *
       BigInt(confused ? 50 : weakened ? 70 : 100) / 100n;
+
     const effectiveDef = combat.def *
       BigInt(confused ? 50 : defenseReduced ? 50 : 100) / 100n;
 
     const hitChance = Math.max(
       1,
-      Math.min(99, Number(combat.acc > 99n ? 99n : combat.acc) + luckBonus)
+      Math.min(
+        99,
+        Number(combat.acc > 99n ? 99n : combat.acc) + luckBonus
+      )
     );
 
-    const missed = frozen || newPlayerHp <= 0n ||
+    const missed = frozen ||
+      newPlayerHp <= 0n ||
       Math.random() * 100 >= hitChance;
+
     const critical = !missed &&
       Math.random() * 100 <
-      Math.max(0, Math.min(95, Number(combat.crit > 95n ? 95n : combat.crit)));
+      Math.max(
+        0,
+        Math.min(
+          95,
+          Number(combat.crit > 95n ? 95n : combat.crit)
+        )
+      );
 
     let damage = 0n;
 
     if (!missed) {
       damage = effectiveAtk +
-        (critical ? effectiveAtk * combat.critDmg / 100n : 0n);
+        (
+          critical
+            ? effectiveAtk * combat.critDmg / 100n
+            : 0n
+        );
 
       const defenseAfterPen = bossDefense > combat.pen
         ? bossDefense - combat.pen
@@ -970,7 +1251,10 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     let newBossHp = oldBossHp - damage;
     const defeated = newBossHp === 0n ? 1 : 0;
 
-    const speedBonus = combat.spd >= 200n ? 20 : Number(combat.spd / 10n);
+    const speedBonus = combat.spd >= 200n
+      ? 20
+      : Number(combat.spd / 10n);
+
     const evasionPenalty = slowed ? 25 : 0;
 
     const evasionChance = Math.max(
@@ -978,25 +1262,42 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
       Math.min(
         95,
         Number(combat.evade > 95n ? 95n : combat.evade) +
-          speedBonus - evasionPenalty
+          speedBonus -
+          evasionPenalty
       )
     );
 
-    const evaded = newBossHp > 0n && newPlayerHp > 0n &&
+    const minBossDamage = BigInt(
+      Math.max(1, Number(bossData.minDamage) || 30000)
+    );
+
+    const maxBossDamage = BigInt(
+      Math.max(
+        Number(minBossDamage),
+        Number(bossData.maxDamage) || 100000
+      )
+    );
+
+    const rawBossDamage = minBossDamage +
+      BigInt(
+        Math.floor(
+          Math.random() *
+          (Number(maxBossDamage - minBossDamage) + 1)
+        )
+      );
+
+    const evaded = newBossHp > 0n &&
+      newPlayerHp > 0n &&
       Math.random() * 100 < evasionChance;
 
-    const minBossDamage = BigInt(Math.max(1, Number(bossData.minDamage) || 30000));
-    const maxBossDamage = BigInt(Math.max(
-      Number(minBossDamage),
-      Number(bossData.maxDamage) || 100000
-    ));
-    const rawBossDamage = minBossDamage +
-      BigInt(Math.floor(Math.random() *
-        (Number(maxBossDamage - minBossDamage) + 1)));
-
-    const bossDamage = newBossHp === 0n || evaded || newPlayerHp <= 0n
-      ? 0n
-      : (rawBossDamage > effectiveDef ? rawBossDamage - effectiveDef : 1n);
+    const bossDamage =
+      newBossHp === 0n || evaded || newPlayerHp <= 0n
+        ? 0n
+        : (
+          rawBossDamage > effectiveDef
+            ? rawBossDamage - effectiveDef
+            : 1n
+        );
 
     newPlayerHp = newPlayerHp > bossDamage
       ? newPlayerHp - bossDamage
@@ -1015,29 +1316,40 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
       const skill = bossData.skills[
         Math.floor(Math.random() * bossData.skills.length)
       ];
+
       bossSkill = {
         name: skill.name,
         description: skill.description,
         type: skill.type
       };
 
-      const dotDamage = BigInt(Math.max(
-        1,
-        Math.floor((Number(bossData.minDamage) || 30000) / 10)
-      ));
+      const dotDamage = BigInt(
+        Math.max(
+          1,
+          Math.floor(
+            (Number(bossData.minDamage) || 30000) / 10
+          )
+        )
+      );
 
       switch (skill.type) {
         case "freeze":
           playerStatus.freezeTurns = Math.max(
-            Number(playerStatus.freezeTurns || 0), 3
+            Number(playerStatus.freezeTurns || 0),
+            3
           );
-          statusMessages.push("빙결: 다음 3턴 동안 공격할 수 없어.");
+
+          statusMessages.push(
+            "빙결: 다음 3턴 동안 공격할 수 없어."
+          );
           break;
 
         case "burn":
         case "poison":
           playerStatus[`${skill.type}Turns`] = 3;
-          playerStatus[`${skill.type}Damage`] = dotDamage.toString();
+          playerStatus[`${skill.type}Damage`] =
+            dotDamage.toString();
+
           statusMessages.push(
             `${skill.type === "burn" ? "화상" : "중독"}: 3턴 동안 지속 피해를 받아.`
           );
@@ -1045,51 +1357,79 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
 
         case "weaken":
           playerStatus.weakenTurns = 3;
-          statusMessages.push("약화: 3턴 동안 공격력이 감소해.");
+          statusMessages.push(
+            "약화: 3턴 동안 공격력이 감소해."
+          );
           break;
 
         case "defenseDown":
           playerStatus.defenseDownTurns = 3;
-          statusMessages.push("방어 약화: 3턴 동안 방어력이 감소해.");
+          statusMessages.push(
+            "방어 약화: 3턴 동안 방어력이 감소해."
+          );
           break;
 
         case "slow":
           playerStatus.slowTurns = 3;
-          statusMessages.push("둔화: 3턴 동안 회피 능력이 감소해.");
+          statusMessages.push(
+            "둔화: 3턴 동안 회피 능력이 감소해."
+          );
           break;
 
         case "healBlock":
           playerStatus.healBlockTurns = 3;
-          statusMessages.push("회복 봉쇄: 3턴 동안 체력을 회복할 수 없어.");
+          statusMessages.push(
+            "회복 봉쇄: 3턴 동안 체력을 회복할 수 없어."
+          );
           break;
 
         case "shield":
           playerStatus.bossShieldTurns = 2;
-          statusMessages.push("보호막: 다음 2턴 동안 보스가 받는 피해가 절반이 돼.");
+          statusMessages.push(
+            "보호막: 다음 2턴 동안 보스가 받는 피해가 절반이 돼."
+          );
           break;
 
         case "drain": {
-          const extra = BigInt(Math.max(
-            1,
-            Math.floor((Number(bossData.minDamage) || 30000) / 2)
-          ));
-          newPlayerHp = newPlayerHp > extra ? newPlayerHp - extra : 0n;
-          statusMessages.push(`추가 피해 ${extra.toString()}을 받았어.`);
+          const extra = BigInt(
+            Math.max(
+              1,
+              Math.floor(
+                (Number(bossData.minDamage) || 30000) / 2
+              )
+            )
+          );
+
+          newPlayerHp = newPlayerHp > extra
+            ? newPlayerHp - extra
+            : 0n;
+
+          statusMessages.push(
+            `추가 피해 ${extra.toString()}을 받았어.`
+          );
           break;
         }
 
         case "bossHeal": {
-          const recovery = bossMax / 100n > 0n ? bossMax / 100n : 1n;
+          const recovery = bossMax / 100n > 0n
+            ? bossMax / 100n
+            : 1n;
+
           newBossHp = newBossHp + recovery > bossMax
             ? bossMax
             : newBossHp + recovery;
-          statusMessages.push("보스가 최대 체력의 1%를 회복했어.");
+
+          statusMessages.push(
+            "보스가 최대 체력의 1%를 회복했어."
+          );
           break;
         }
 
         case "confuse":
           playerStatus.confuseTurns = 3;
-          statusMessages.push("혼란: 3턴 동안 공격력과 방어력이 감소해.");
+          statusMessages.push(
+            "혼란: 3턴 동안 공격력과 방어력이 감소해."
+          );
           break;
       }
     }
@@ -1107,10 +1447,11 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     }
 
     // 테스트 모드에서는 체력이 0이 되더라도 즉시 1조로 복구
-    // 따라서 프런트엔드에서도 플레이어가 전투 불능 상태가 되지 않아
     if (BOSS_TEST_MODE && newPlayerHp <= 0n) {
       newPlayerHp = BOSS_TEST_HP;
     }
+
+    let myMaterialDrops = [];
 
     const contributionResult = await client.query(
       `SELECT damage FROM boss_contributions
@@ -1119,12 +1460,18 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     );
 
     const totalDamage =
-      safeBigInt(contributionResult.rows[0]?.damage || "0") + damage;
+      safeBigInt(contributionResult.rows[0]?.damage || "0") +
+      damage;
 
     await client.query(
       `UPDATE world_bosses SET current_hp = $1, defeated = $2
        WHERE cycle_key = $3 AND boss_id = $4`,
-      [newBossHp.toString(), defeated, cycle, bossId]
+      [
+        newBossHp.toString(),
+        defeated,
+        cycle,
+        bossId
+      ]
     );
 
     await client.query(
@@ -1133,7 +1480,9 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
        WHERE cycle_key = $4 AND boss_id = $5 AND player_id = $6`,
       [
         newPlayerHp.toString(),
-        BOSS_TEST_MODE ? BOSS_TEST_HP.toString() : state.max_hp,
+        BOSS_TEST_MODE
+          ? BOSS_TEST_HP.toString()
+          : state.max_hp,
         JSON.stringify(playerStatus),
         cycle,
         bossId,
@@ -1147,8 +1496,77 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (cycle_key, boss_id, player_id)
        DO UPDATE SET damage = EXCLUDED.damage`,
-      [cycle, bossId, playerId, totalDamage.toString()]
+      [
+        cycle,
+        bossId,
+        playerId,
+        totalDamage.toString()
+      ]
     );
+
+    // 보스 처치 시 이번 주기 참여자 전원에게 보상 지급
+    if (defeated) {
+      const contributors = await client.query(
+        `SELECT player_id
+         FROM boss_contributions
+         WHERE cycle_key = $1
+           AND boss_id = $2
+           AND damage::numeric > 0`,
+        [cycle, bossId]
+      );
+
+      for (const contributor of contributors.rows) {
+        const rewardPlayerId = contributor.player_id;
+        const drops = createBossMaterialDrops(bossId);
+
+        // 같은 보스·주기·플레이어에게는 보상 기록을 한 번만 생성
+        const rewardInsert = await client.query(
+          `INSERT INTO boss_material_rewards
+            (cycle_key, boss_id, player_id, reward_json)
+           VALUES ($1, $2, $3, $4::jsonb)
+           ON CONFLICT (cycle_key, boss_id, player_id)
+           DO NOTHING
+           RETURNING player_id`,
+          [
+            cycle,
+            bossId,
+            rewardPlayerId,
+            JSON.stringify(drops)
+          ]
+        );
+
+        if (rewardInsert.rowCount === 0) {
+          continue;
+        }
+
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtext($1))",
+          [rewardPlayerId]
+        );
+
+        for (const drop of drops) {
+          await client.query(
+            `INSERT INTO player_materials
+              (player_id, material_id, material_name, quantity)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (player_id, material_id)
+             DO UPDATE SET
+               quantity = player_materials.quantity + EXCLUDED.quantity,
+               material_name = EXCLUDED.material_name`,
+            [
+              rewardPlayerId,
+              String(drop.id),
+              drop.name,
+              drop.quantity
+            ]
+          );
+        }
+
+        if (rewardPlayerId === playerId) {
+          myMaterialDrops = drops;
+        }
+      }
+    }
 
     await client.query("COMMIT");
 
@@ -1161,7 +1579,9 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
       critical,
       missed,
       playerHp: newPlayerHp.toString(),
-      playerMaxHp: BOSS_TEST_MODE ? BOSS_TEST_HP.toString() : state.max_hp,
+      playerMaxHp: BOSS_TEST_MODE
+        ? BOSS_TEST_HP.toString()
+        : state.max_hp,
       bossDamage: bossDamage.toString(),
       evaded,
       statusDamage: statusDamage.toString(),
@@ -1170,8 +1590,12 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
       statusEffects: playerStatus,
       healing: healing.toString(),
       contribution: totalDamage.toString(),
+      materialDrops: myMaterialDrops,
       combatStats: Object.fromEntries(
-        Object.entries(combat).map(([key, value]) => [key, value.toString()])
+        Object.entries(combat).map(([key, value]) => [
+          key,
+          value.toString()
+        ])
       )
     });
   } catch (error) {
@@ -1180,7 +1604,10 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
     } catch {}
 
     console.error("보스 공격 오류:", error);
-    res.status(500).json({ error: "보스 공격 중 오류가 발생했어." });
+
+    res.status(500).json({
+      error: "보스 공격 중 오류가 발생했어."
+    });
   } finally {
     client.release();
   }
@@ -1189,10 +1616,19 @@ app.post("/api/bosses/:bossId/attack", async (req, res) => {
 // 플레이어 등록 및 최신 분신 능력치 저장
 app.post("/api/register", async (req, res) => {
   try {
-    const { id, name, heroName, rank, power, stats } = req.body;
+    const {
+      id,
+      name,
+      heroName,
+      rank,
+      power,
+      stats
+    } = req.body;
 
     if (!id || !name) {
-      return res.status(400).json({ error: "정보가 부족해." });
+      return res.status(400).json({
+        error: "정보가 부족해."
+      });
     }
 
     const old = await getPlayer(id);
@@ -1202,7 +1638,10 @@ app.post("/api/register", async (req, res) => {
       const value = safeBigInt(
         stats?.[key] ?? old?.stats?.[key] ?? 0
       );
-      cleanStats[key] = (value < 0n ? 0n : value).toString();
+
+      cleanStats[key] = (
+        value < 0n ? 0n : value
+      ).toString();
     }
 
     const player = {
@@ -1227,17 +1666,26 @@ app.post("/api/register", async (req, res) => {
          stats_json = EXCLUDED.stats_json
        RETURNING id, name, "heroName", rank, power, wins, stats_json`,
       [
-        player.id, player.name, player.heroName, player.rank,
-        player.power, player.wins, JSON.stringify(cleanStats)
+        player.id,
+        player.name,
+        player.heroName,
+        player.rank,
+        player.power,
+        player.wins,
+        JSON.stringify(cleanStats)
       ]
     );
 
     const saved = toPlayer(result.rows[0]);
     players.set(saved.id, saved);
+
     res.json({ success: true });
   } catch (error) {
     console.error("플레이어 등록 오류:", error);
-    res.status(500).json({ error: "플레이어 정보를 저장하지 못했어." });
+
+    res.status(500).json({
+      error: "플레이어 정보를 저장하지 못했어."
+    });
   }
 });
 
@@ -1248,18 +1696,27 @@ app.post("/api/queue", async (req, res) => {
     const player = await getPlayer(id);
 
     if (!player) {
-      return res.status(404).json({ error: "먼저 서버에 접속해 줘." });
+      return res.status(404).json({
+        error: "먼저 서버에 접속해 줘."
+      });
     }
 
     if (queue.includes(id)) {
-      return res.json({ success: true, matched: false });
+      return res.json({
+        success: true,
+        matched: false
+      });
     }
 
     const index = queue.findIndex(x => x !== id);
 
     if (index === -1) {
       queue.push(id);
-      return res.json({ success: true, matched: false });
+
+      return res.json({
+        success: true,
+        matched: false
+      });
     }
 
     const opponentId = queue.splice(index, 1)[0];
@@ -1267,10 +1724,16 @@ app.post("/api/queue", async (req, res) => {
 
     if (!opponent) {
       queue.push(id);
-      return res.json({ success: true, matched: false });
+
+      return res.json({
+        success: true,
+        matched: false
+      });
     }
 
-    const win = safeBigInt(player.power) >= safeBigInt(opponent.power);
+    const win =
+      safeBigInt(player.power) >= safeBigInt(opponent.power);
+
     const winner = win ? player : opponent;
     winner.wins += 1;
 
@@ -1295,10 +1758,16 @@ app.post("/api/queue", async (req, res) => {
       summary: "전투력 비교로 결정된 테스트 대전이야."
     });
 
-    res.json({ success: true, matched: true });
+    res.json({
+      success: true,
+      matched: true
+    });
   } catch (error) {
     console.error("대전 대기 오류:", error);
-    res.status(500).json({ error: "대전을 시작하지 못했어." });
+
+    res.status(500).json({
+      error: "대전을 시작하지 못했어."
+    });
   }
 });
 
@@ -1311,8 +1780,10 @@ app.post("/api/challenge", async (req, res) => {
 
     const opponentResult = await pool.query(
       `SELECT id, name, "heroName", rank, power, wins, stats_json
-       FROM players WHERE name = $1 AND id <> $2
-       ORDER BY wins DESC LIMIT 1`,
+       FROM players
+       WHERE name = $1 AND id <> $2
+       ORDER BY wins DESC
+       LIMIT 1`,
       [targetName, id]
     );
 
@@ -1324,7 +1795,9 @@ app.post("/api/challenge", async (req, res) => {
       });
     }
 
-    const win = safeBigInt(player.power) >= safeBigInt(opponent.power);
+    const win =
+      safeBigInt(player.power) >= safeBigInt(opponent.power);
+
     const winner = win ? player : opponent;
     winner.wins += 1;
 
@@ -1349,10 +1822,16 @@ app.post("/api/challenge", async (req, res) => {
       summary: "전투력 비교로 결정된 테스트 대전이야."
     });
 
-    res.json({ success: true, opponent });
+    res.json({
+      success: true,
+      opponent
+    });
   } catch (error) {
     console.error("닉네임 대결 오류:", error);
-    res.status(500).json({ error: "대결을 진행하지 못했어." });
+
+    res.status(500).json({
+      error: "대결을 진행하지 못했어."
+    });
   }
 });
 
@@ -1361,7 +1840,9 @@ app.post("/api/cancel", (req, res) => {
   const id = String(req.body.id || "");
   const index = queue.indexOf(id);
 
-  if (index !== -1) queue.splice(index, 1);
+  if (index !== -1) {
+    queue.splice(index, 1);
+  }
 
   res.json({ success: true });
 });
@@ -1370,7 +1851,9 @@ app.post("/api/cancel", (req, res) => {
 app.get("/api/match/:id", (req, res) => {
   const match = matches.get(req.params.id);
 
-  if (!match) return res.json({ match: null });
+  if (!match) {
+    return res.json({ match: null });
+  }
 
   matches.delete(req.params.id);
   res.json({ match });
@@ -1395,7 +1878,10 @@ app.get("/api/rankings", async (req, res) => {
     });
   } catch (error) {
     console.error("랭킹 조회 오류:", error);
-    res.status(500).json({ error: "랭킹을 불러오지 못했어." });
+
+    res.status(500).json({
+      error: "랭킹을 불러오지 못했어."
+    });
   }
 });
 
@@ -1403,12 +1889,14 @@ app.get("/api/rankings", async (req, res) => {
 app.get("/api/health", async (req, res) => {
   try {
     await pool.query("SELECT 1");
+
     res.json({
       success: true,
       message: "PostgreSQL 연결 정상"
     });
   } catch (error) {
     console.error("서버 상태 확인 오류:", error);
+
     res.status(500).json({
       success: false,
       message: "데이터베이스 연결 오류"
@@ -1424,6 +1912,7 @@ io.on("connection", socket => {
     if (typeof message !== "string") return;
 
     const cleanMessage = message.trim().slice(0, 200);
+
     if (!cleanMessage) return;
 
     io.emit("chat message", {
@@ -1446,7 +1935,9 @@ async function startServer() {
     await initialiseDatabase();
 
     server.listen(PORT, () => {
-      console.log(`분신 키우기 서버 실행 중! 포트: ${PORT}`);
+      console.log(
+        `분신 키우기 서버 실행 중! 포트: ${PORT}`
+      );
     });
   } catch (error) {
     console.error("서버 시작 실패:", error);
