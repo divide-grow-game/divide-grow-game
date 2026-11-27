@@ -118,6 +118,8 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
   <button class="tab" data-tab="craft" onclick="tab('craft')">⚒️ 장비 제작</button>
   <button class="tab" data-tab="battle" onclick="tab('battle')">⚔️ 전투</button>
   <button class="tab" data-tab="dungeon" onclick="tab('dungeon')">🏰 던전</button>
+  <button class="tab" data-tab="daily" onclick="tab('daily')">📅 일일 퀘스트</button>
+  <button class="tab" data-tab="guild" onclick="tab('guild')">🏰 길드</button>
   <button class="tab" data-tab="trade" onclick="tab('trade')">🤝 거래</button>
   <button class="tab" data-tab="pvp" onclick="tab('pvp')">🌐 온라인 PvP</button>
   <button class="tab" data-tab="ranking" onclick="tab('ranking')">🏆 랭킹</button>
@@ -213,6 +215,15 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
     <div id="dungeonStatus" class="small">던전을 시작하면 15회 전투가 순서대로 진행돼.</div>
   </div>
   <div class="panel half"><h2>던전 전투 기록</h2><div id="dungeonLog" class="log">아직 던전 기록이 없어.</div></div>
+</section>
+
+<section id="daily" class="grid hidden">
+  <div class="panel"><h2>📅 오늘의 일일 퀘스트</h2><p class="muted">매일 한국 시간 자정에 20,000종 중 12개가 무작위로 배정돼. 진행도와 보상 수령 여부는 서버에 저장돼.</p><button class="secondary" onclick="loadDailyQuests()">퀘스트 새로고침</button><div id="dailyQuestList" class="material-list">서버에 접속한 뒤 퀘스트를 불러올 수 있어.</div></div>
+</section>
+<section id="guild" class="grid hidden">
+  <div class="panel half"><h2>🏰 길드 만들기</h2><label>길드 이름<input id="guildName" maxlength="24" placeholder="2~24자"></label><label>길드 소개<input id="guildDescription" maxlength="160" placeholder="길드 소개"></label><button class="gold" onclick="createGuild()">길드 창설</button><div id="myGuild" class="small">서버 접속 후 내 길드 정보를 확인할 수 있어.</div><button class="secondary" onclick="leaveGuild()">길드 탈퇴</button></div>
+  <div class="panel half"><h2>👥 길드원 (최대 30명)</h2><div id="guildMembers" class="material-list">가입한 길드가 없어.</div></div>
+  <div class="panel"><h2>🌐 길드 목록</h2><button class="secondary" onclick="loadGuilds()">목록 새로고침</button><div id="guildList" class="material-list">길드 목록을 불러오는 중...</div></div>
 </section>
 
 <section id="trade" class="grid hidden">
@@ -812,6 +823,7 @@ async function attackBoss(bossId){
 
   try{
     const result=await api(`/api/bosses/${bossId}/attack`,{id:game.playerId});
+    await questProgress('boss_attack',1);
 
     if(!result.success){
       addBossLog(`<span class="bad">${safeText(result.message||'공격할 수 없어.')}</span>`);
@@ -1004,6 +1016,7 @@ function sellMaterial(id){
   if(qty<1||qty>item.quantity)return alert('판매할 수량을 올바르게 입력해 줘.');
   item.quantity-=qty;
   game.money+=qty*materialInfo(item.id).sellPrice;
+  questProgress('material_sell',qty);
   game.materials=game.materials.filter(x=>x.quantity>0);
   render();renderMaterials();syncMaterials();
 }
@@ -1011,7 +1024,7 @@ function sellAllMaterials(){
   if(!game.materials.length)return alert('판매할 재료가 없어.');
   const total=game.materials.reduce((sum,m)=>sum+Math.max(0,Number(m.quantity)||0)*materialInfo(m.id).sellPrice,0);
   if(!confirm(`모든 재료를 판매하고 ${fmtMoney(total)}G를 받을까?`))return;
-  game.money+=total;game.materials=[];render();renderMaterials();syncMaterials();
+  game.money+=total;questProgress('material_sell',game.materials.reduce((n,m)=>n+Number(m.quantity||0),0));game.materials=[];render();renderMaterials();syncMaterials();
 }
 async function syncMaterials(){
   if(!game.playerId)return;
@@ -1095,6 +1108,7 @@ async function craftGear(recipeId){
   try{
     const result=await api('/api/craft',{id:game.playerId,recipeId:Number(recipeId)});
     if(!result.success||!result.item)throw new Error(result.error||'제작에 실패했어.');
+    await questProgress('craft',1);
     for(const need of recipe.materials){
       const item=game.materials.find(x=>Number(x.id)===need.id);
       if(item)item.quantity-=need.quantity;
@@ -1285,6 +1299,8 @@ function tab(id){
   if(id==='craft')renderCrafting();
   if(id==='boss')renderBossPreview();
   if(id==='trade'){ $('myPlayerNumber').textContent=game.playerId||'서버 접속 후 표시'; loadTradeInbox(); }
+  if(id==='daily')loadDailyQuests();
+  if(id==='guild'){loadMyGuild();loadGuilds();}
 }
 
 function render(){
@@ -1419,6 +1435,7 @@ function grow(key){
   let cur=big(h.stats[key]),gain=cur/10n;
   if(gain<10n)gain=10n;
   h.stats[key]=String(clampStat(cur+gain));
+  questProgress('growth',1);
   render();
 }
 
@@ -1596,7 +1613,7 @@ function startBattle(){
   if(result.win){
     const reward=50+stage*20;
     game.money+=reward;
-    game.wins++;
+    game.wins++;questProgress('battle_win',1);
     const drops=grantBattleMaterials(stage);
     const dropText=drops.length?`<p class="goldtxt">🧱 재료 획득: ${drops.map(d=>`${safeText(materialInfo(d.id).name)} X ${d.quantity}`).join(' · ')}</p>`:'';
     $('battleLog').innerHTML=lines.join('<br>')+`<p class="good"><b>승리! ${fmtMoney(reward)}G 획득</b></p>`+dropText;
@@ -1689,7 +1706,7 @@ async function runDungeonRound(){
     $('dungeonLog').insertAdjacentHTML('beforeend',`<p><b>${dungeonRun.round}/15회 전투</b></p>${result.lines.join('<br>')}<p class="${result.win?'good':'bad'}">${result.win?'승리':'패배'} · 남은 HP ${fmtUncapped(dungeonRun.hp)}</p><hr>`);
     $('dungeonLog').scrollTop=$('dungeonLog').scrollHeight;
     if(!result.win){await api('/api/dungeon/abandon',{playerId:game.playerId,runId:dungeonRun.id});dungeonRun=null;$('dungeonStatus').textContent='던전 실패. 남은 HP가 0이거나 전투에서 패배했어.';return;}
-    const reward=50+dungeonRun.level*20;game.money+=reward;game.wins++;
+    const reward=50+dungeonRun.level*20;game.money+=reward;game.wins++;questProgress('dungeon_win',1);
     const drops=grantBattleMaterials(dungeonRun.level);syncMaterials();
     const completed=dungeonRun.round===15;
     await api('/api/dungeon/advance',{playerId:game.playerId,runId:dungeonRun.id,round:dungeonRun.round,state:{hp:dungeonRun.hp,maxHp:dungeonRun.maxHp,statusEffects:[]}});
@@ -1701,6 +1718,18 @@ async function runDungeonRound(){
   finally{dungeonBusy=false;}
 }
 async function abandonDungeon(){if(!dungeonRun)return;try{await api('/api/dungeon/abandon',{playerId:game.playerId,runId:dungeonRun.id});}catch{}dungeonRun=null;$('dungeonStatus').textContent='던전을 포기했어.';}
+
+async function loadDailyQuests(){
+  if(!game.playerId){$('dailyQuestList').textContent='먼저 온라인 서버에 접속해 줘.';return;}
+  try{const r=await api('/api/daily-quests/'+encodeURIComponent(game.playerId));$('dailyQuestList').innerHTML=(r.quests||[]).map(q=>{const reward=typeof q.reward_json==='string'?JSON.parse(q.reward_json):q.reward_json;const pct=Math.min(100,Math.floor(Number(q.progress)*100/Math.max(1,Number(q.target_value))));return `<div class="unit"><b>${safeText(q.quest_name)}</b><p class="small">${safeText(q.description)} · 진행 ${Number(q.progress).toLocaleString()} / ${Number(q.target_value).toLocaleString()}</p><div class="stat"><span>보상</span><b>${Number(reward.gold||0).toLocaleString()} 골드</b></div><div style="height:8px;background:#273047;border-radius:8px;overflow:hidden"><div style="height:8px;width:${pct}%;background:#d6a84e"></div></div><p>${q.claimed?'<span class="good">보상 수령 완료</span>':q.completed?`<button class="gold" onclick="claimDailyQuest(${Number(q.quest_id)})">보상 받기</button>`:'<span class="small">진행 중</span>'}</p></div>`;}).join('')||'오늘 배정된 퀘스트가 없어.';}catch(e){$('dailyQuestList').textContent=e.message;}
+}
+async function claimDailyQuest(questId){try{const r=await api('/api/daily-quests/claim',{playerId:game.playerId,questId});await loadGameStateFromServer();await loadDailyQuests();alert(`${Number(r.gold).toLocaleString()} 골드를 받았어!`);}catch(e){alert(e.message);}}
+async function questProgress(type,amount=1){if(!game.playerId)return;try{await api('/api/daily-quests/progress',{playerId:game.playerId,type,amount});}catch(e){console.warn('퀘스트 진행 저장 실패',e);}}
+async function loadMyGuild(){if(!game.playerId){$('myGuild').textContent='먼저 서버에 접속해 줘.';return;}try{const r=await api('/api/guilds/mine/'+encodeURIComponent(game.playerId));if(!r.guild){$('myGuild').textContent='현재 가입한 길드가 없어.';$('guildMembers').textContent='가입한 길드가 없어.';return;}const g=r.guild;$('myGuild').innerHTML=`<b>${safeText(g.name)}</b> · Lv.${g.level}<p>${safeText(g.description||'소개 없음')}</p><p>길드원 ${g.members}/30명 · 기여도 ${Number(g.contribution||0).toLocaleString()}</p>`;$('guildMembers').innerHTML=(r.members||[]).map(m=>`<div class="unit">${m.role==='leader'?'👑':m.role==='officer'?'⭐':'👤'} <b>${safeText(m.name||m.player_id)}</b> · ${safeText(m.heroName||'분신 미등록')}<div class="small">${m.role==='leader'?'길드장':m.role==='officer'?'간부':'길드원'} · 기여도 ${Number(m.contribution||0).toLocaleString()}</div></div>`).join('');}catch(e){$('myGuild').textContent=e.message;}}
+async function loadGuilds(){try{const r=await api('/api/guilds');$('guildList').innerHTML=(r.guilds||[]).map(g=>`<div class="unit"><b>${safeText(g.name)}</b> · Lv.${g.level}<p class="small">${safeText(g.description||'소개 없음')} · 인원 ${g.members}/30</p>${Number(g.members)<30?`<button onclick="joinGuild('${g.id}')">가입</button>`:'<button disabled>정원 초과</button>'}</div>`).join('')||'아직 생성된 길드가 없어.';}catch(e){$('guildList').textContent=e.message;}}
+async function createGuild(){if(!game.playerId)return alert('먼저 온라인 서버에 접속해 줘.');try{await api('/api/guilds/create',{playerId:game.playerId,name:$('guildName').value,description:$('guildDescription').value});await loadMyGuild();await loadGuilds();alert('길드를 만들었어!');}catch(e){alert(e.message);}}
+async function joinGuild(guildId){if(!game.playerId)return alert('먼저 온라인 서버에 접속해 줘.');try{await api('/api/guilds/join',{playerId:game.playerId,guildId});await loadMyGuild();await loadGuilds();alert('길드에 가입했어!');}catch(e){alert(e.message);}}
+async function leaveGuild(){if(!game.playerId)return; if(!confirm('정말 길드를 탈퇴할까? 길드장이 탈퇴하면 다른 길드원에게 길드장 권한이 넘어가.'))return;try{await api('/api/guilds/leave',{playerId:game.playerId});await loadMyGuild();await loadGuilds();}catch(e){alert(e.message);}}
 
 async function sendTradeRequest(){
   if(!game.playerId)return alert('먼저 온라인 서버에 접속해 줘.');
@@ -1740,7 +1769,7 @@ function setTradeMaterialReceive(id,value){tradeReceiveMaterials[String(id)]=Mat
 async function saveTradeOffer(){
   if(!activeTradeId)return;try{await syncGameState();const gearUid=$('tradeGear').value,materialId=$('tradeMaterial').value;const gear=gearUid?game.inventory.filter(x=>String(x.uid)===gearUid):[];const material=materialId?game.materials.filter(x=>String(x.id)===materialId).map(x=>({...x,quantity:Math.min(Number(x.quantity),Math.max(1,Math.floor(Number($('tradeMaterialQty').value)||1)))})):[];const gold=String(Math.max(0,Math.floor(Number($('tradeGold').value)||0)));const acceptMaterials=Object.entries(tradeReceiveMaterials).map(([id,quantity])=>({id,quantity}));await api('/api/trade/session/'+activeTradeId+'/offer',{playerId:game.playerId,offer:{gold,gear,materials:material,acceptGear:tradeReceiveGear,acceptMaterials}});await refreshTradeRoom();alert('거래 제안을 갱신했어.');}catch(e){alert(e.message);}
 }
-async function confirmTrade(){if(!activeTradeId)return;try{await syncGameState();const r=await api('/api/trade/session/'+activeTradeId+'/confirm',{playerId:game.playerId});if(r.completed){await loadGameStateFromServer();alert('거래가 완료됐어!');}else alert('내 거래 확정을 저장했어. 상대방의 확정을 기다리는 중이야.');await refreshTradeRoom();}catch(e){alert(e.message);}}
+async function confirmTrade(){if(!activeTradeId)return;try{await syncGameState();const r=await api('/api/trade/session/'+activeTradeId+'/confirm',{playerId:game.playerId});if(r.completed){await questProgress('trade',1);await loadGameStateFromServer();alert('거래가 완료됐어!');}else alert('내 거래 확정을 저장했어. 상대방의 확정을 기다리는 중이야.');await refreshTradeRoom();}catch(e){alert(e.message);}}
 async function declineTrade(){if(!activeTradeId)return;try{await api('/api/trade/session/'+activeTradeId+'/decline',{playerId:game.playerId});activeTradeId=null;if(tradePollTimer)clearInterval(tradePollTimer);$('tradeRoom').textContent='거래를 취소했어.';loadTradeInbox();}catch(e){alert(e.message);}}
 async function loadGameStateFromServer(){try{const r=await api('/api/game-state/'+encodeURIComponent(game.playerId));if(r.state){game.money=Number(r.state.money);game.inventory=r.state.inventory||[];game.materials=r.state.materials||[];render();renderMaterials();persistGame();}}catch(e){console.warn(e);}}
 
@@ -1852,7 +1881,7 @@ async function checkMatch(){
     if(r.match){
       let m=r.match;
       if(m.result==='win'){
-        game.onlineWins++;
+        game.onlineWins++;questProgress('pvp_win',1);
         game.money+=m.reward||0;
       }else{
         game.losses++;
