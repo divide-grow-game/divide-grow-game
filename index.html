@@ -294,8 +294,8 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
 
 <section id="chat" class="grid hidden">
   <div class="panel"><h2>💬 공용 채팅</h2><p class="muted">온라인에 접속한 모든 플레이어가 함께 대화하는 채팅이야.</p><div id="publicMessages" class="log">실시간 공용 채팅은 채팅 서버 연결 후 사용할 수 있어.</div><div class="actions"><input id="publicMessageInput" placeholder="모두에게 보낼 메시지" maxlength="300"><button onclick="sendPublicMessage()">전송</button></div></div>
-  <div class="panel"><h2>🔒 비밀 채팅</h2><p class="muted">닉네임을 지정한 플레이어들만 참여하는 대화방이야.</p><label>대화 상대 닉네임(쉼표로 구분)<input id="privateRecipients" placeholder="예: 별빛용사, 달빛기사"></label><div id="privateMessages" class="log">비밀 채팅은 서버 연결 후 사용할 수 있어.</div><div class="actions"><input id="privateMessageInput" placeholder="선택한 상대에게 보낼 메시지" maxlength="300"><button onclick="sendPrivateMessage()">전송</button></div></div>
-  <div class="panel"><p class="small">안내: 현재 사이트는 정적 GitHub Pages라서 여러 사람에게 동시에 메시지를 전달하거나 보스의 공동 체력·기여도를 공유할 수 없어. 실제 실시간 기능에는 계정 식별, 메시지 저장, 보스 상태 동기화 및 보상 지급을 처리하는 백엔드 서버가 필요해.</p></div>
+  <div class="panel"><h2>🔒 비밀 채팅</h2><p class="muted">온라인 플레이어 목록에서 대화 상대를 선택해.</p><div id="onlinePlayers" class="log">온라인 플레이어 목록을 불러오는 중...</div><label>받는 플레이어 ID(쉼표로 구분)<input id="privateRecipients" placeholder="온라인 플레이어 목록에서 ID 복사"></label><div id="privateMessages" class="log">비밀 채팅은 서버 연결 후 사용할 수 있어.</div><div class="actions"><input id="privateMessageInput" placeholder="선택한 상대에게 보낼 메시지" maxlength="300"><button onclick="sendPrivateMessage()">전송</button></div></div>
+  <div class="panel"><p class="small">안내: 실시간 채팅과 서버 변경 알림은 Socket.IO 백엔드 연결이 필요해. 채팅 내용은 현재 서버 메모리에서 실시간 전달되며 영구 저장되지는 않아.</p></div>
 </section>
 
 <section id="ranking" class="grid hidden"><div class="panel"><h2>🏆 서버 전체 랭킹</h2><button onclick="loadRanking()">랭킹 새로고침</button><div id="rankingTable" style="margin-top:12px" class="small">온라인 서버에 접속한 뒤 불러올 수 있어.</div><div id="myRanking" class="stat" style="margin-top:12px"><span>내 전체 랭킹</span><b>서버 접속 후 표시</b></div></div></section>
@@ -355,6 +355,7 @@ let game={
   onlineWins:0
 };
 let apiBase='https://divide-grow-game.onrender.com',pollTimer=null;
+let liveSocket=null;
 let allGear=null,catalogRendered=false,gearPage=0;
 const GEAR_PAGE_SIZE=100;
 
@@ -932,17 +933,54 @@ async function attackBoss(bossId){
   }
 }
 
-async function sendPublicMessage(){
-  const msg=$('publicMessageInput').value.trim();
-  if(!msg)return;
-  alert('실시간 공용 채팅 서버가 아직 연결되지 않았어. 메시지를 전송하지 않았어.');
+function appendChatMessage(target, packet, privateChat=false){
+  const el=$(target); if(!el)return;
+  const line=document.createElement('div');
+  const who=privateChat?`${packet.name} (${packet.heroName||''})`:`${packet.name} / ${packet.heroName||''}`;
+  line.textContent=`[${new Date(packet.time||Date.now()).toLocaleTimeString()}] ${who}: ${packet.message}`;
+  el.appendChild(line); el.scrollTop=el.scrollHeight;
 }
-async function sendPrivateMessage(){
-  const names=$('privateRecipients').value.split(',').map(x=>x.trim()).filter(Boolean);
-  const msg=$('privateMessageInput').value.trim();
-  if(!names.length)return alert('대화할 닉네임을 입력해 줘.');
+function sendPublicMessage(){
+  const input=$('publicMessageInput'),msg=input.value.trim();
   if(!msg)return;
-  alert('실시간 비밀 채팅 서버가 아직 연결되지 않았어. 메시지를 전송하지 않았어.');
+  if(!liveSocket?.connected)return alert('실시간 서버에 연결되지 않았어. 서버 연결 상태를 확인해 줘.');
+  liveSocket.emit('chat:public',{message:msg}); input.value='';
+}
+function sendPrivateMessage(){
+  const ids=$('privateRecipients').value.split(',').map(x=>x.trim()).filter(Boolean);
+  const input=$('privateMessageInput'),msg=input.value.trim();
+  if(!ids.length)return alert('받는 플레이어 ID를 입력해 줘.');
+  if(!msg)return;
+  if(!liveSocket?.connected)return alert('실시간 서버에 연결되지 않았어.');
+  liveSocket.emit('chat:private',{toPlayerIds:ids,message:msg},result=>{
+    if(!result?.success)alert(result?.message||'메시지를 보내지 못했어.');
+    else input.value='';
+  });
+}
+function connectRealtime(){
+  if(typeof io!=='function')return;
+  if(liveSocket){liveSocket.disconnect();liveSocket=null;}
+  liveSocket=io(apiBase,{transports:['websocket','polling'],reconnection:true});
+  liveSocket.on('connect',()=>{
+    if(game.playerId)liveSocket.emit('player:identify',{playerId:game.playerId});
+    $('netState').textContent='서버 API 및 실시간 연결됨';
+  });
+  liveSocket.on('disconnect',()=>{$('netState').textContent='실시간 재연결 중';});
+  liveSocket.on('realtime:error',e=>console.warn(e?.message||'실시간 인증 오류'));
+  liveSocket.on('presence:list',list=>{
+    const el=$('onlinePlayers'); if(!el)return;
+    el.replaceChildren();
+    if(!list.length){el.textContent='현재 온라인 플레이어가 없어.';return;}
+    for(const p of list){const row=document.createElement('div');row.textContent=`${p.name} / ${p.heroName} · ID: ${p.playerId}`;el.appendChild(row);}
+  });
+  liveSocket.on('chat:public',p=>appendChatMessage('publicMessages',p));
+  liveSocket.on('chat:private',p=>appendChatMessage('privateMessages',p,true));
+  liveSocket.on('server:update',event=>{
+    const path=event?.path||'';
+    if(path.includes('/trade/')){loadTradeInbox();if(activeTradeId)refreshTradeRoom();}
+    if(path.includes('/pvp/')){loadRanking();}
+    if(path.includes('/boss/')){renderBossPreview();if(selectedBossId)renderBossBattle();}
+  });
 }
 
 function big(v){
@@ -1808,7 +1846,8 @@ async function connectServer(){
       stats:Object.fromEntries(Object.entries(gearStats(h)).map(([k,v])=>[k,String(v)]))
     });
 
-    $('netState').textContent='서버 연결됨';
+    connectRealtime();
+    $('netState').textContent='서버 API 연결됨 · 실시간 연결 중';
     $('queueText').textContent='서버에 접속했어. 대전 상대를 찾을 수 있어.';
     loadRanking();
     await loadServerMaterials();
