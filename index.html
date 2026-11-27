@@ -85,7 +85,7 @@ td,th{text-align:left;padding:8px;border-bottom:1px solid #39496e}
 .grade{display:inline-block;border-radius:6px;padding:2px 7px;background:#2e3a5a;border:1px solid #586a97;font-size:11px;white-space:nowrap}
 .grade-1,.grade-2{color:#ffe58e}.grade-3,.grade-4{color:#f3baff}.grade-5,.grade-6,.grade-7{color:#9bd1ff}
 .gear-buy{padding:7px 9px;font-size:12px;white-space:nowrap}
-.material-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:9px;border-bottom:1px solid #2e3d60}.material-list{max-height:520px;overflow:auto;border:1px solid #3b4a70;border-radius:10px;background:#0e162b}.material-row button{padding:6px 9px;font-size:12px}.material-tools{display:grid;grid-template-columns:1fr 130px;gap:8px;margin:10px 0}
+.material-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:9px;border-bottom:1px solid #2e3d60}.material-list{max-height:520px;overflow:auto;border:1px solid #3b4a70;border-radius:10px;background:#0e162b}.material-row button{padding:6px 9px;font-size:12px}.craft-row{padding:11px;border-bottom:1px solid #2e3d60}.craft-row:last-child{border-bottom:0}.craft-recipe{font-size:12px;color:var(--muted);margin:5px 0}.craft-stats{font-size:12px;color:#ffe4a8}.craft-row button{margin-top:7px}.material-tools{display:grid;grid-template-columns:1fr 130px;gap:8px;margin:10px 0}
 .gear-pagination{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 4px;position:sticky;bottom:0;background:#0e162b;border-top:1px solid #3b4a70}
 .gear-pagination button{padding:7px 12px}.gear-page-label{font-size:12px;color:var(--muted);min-width:105px;text-align:center}
 footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
@@ -114,7 +114,8 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
   <button class="tab" data-tab="home" onclick="tab('home')">내 분신</button>
   <button class="tab" data-tab="growth" onclick="tab('growth')">🌱 성장</button>
   <button class="tab" data-tab="gear" onclick="tab('gear')">🎒 장비 전체 목록</button>
-  <button class="tab" data-tab="materials" onclick="tab('materials')">🧱 재료 보관함</button>
+  <button class="tab" data-tab="materials" onclick="tab('materials')">🧱 재료 인벤토리</button>
+  <button class="tab" data-tab="craft" onclick="tab('craft')">⚒️ 장비 제작</button>
   <button class="tab" data-tab="battle" onclick="tab('battle')">⚔️ 전투</button>
   <button class="tab" data-tab="dungeon" onclick="tab('dungeon')">🏰 던전</button>
   <button class="tab" data-tab="trade" onclick="tab('trade')">🤝 거래</button>
@@ -172,6 +173,22 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
     <div class="material-tools"><input id="materialSearch" placeholder="재료 이름 검색" oninput="renderMaterials()"><button class="secondary" onclick="sellAllMaterials()">전체 재료 판매</button></div>
     <div id="materialList" class="material-list"><p class="small">아직 보유한 재료가 없어.</p></div>
     <p class="small">재료를 판매하면 표시된 판매 가격만큼 골드를 얻어. 재료별 수량을 직접 입력해 판매할 수도 있어.</p>
+  </div>
+</section>
+
+
+<section id="craft" class="grid hidden">
+  <div class="panel">
+    <h2>⚒️ 제작 전용 장비</h2>
+    <p class="muted">상점에서는 살 수 없는 제작 전용 장비야. 5개 부위 × 15등급 × 3개 계열, 총 225종의 제작식을 제공해. 각 장비는 여러 능력치를 함께 올려 줘.</p>
+    <div class="gear-tools">
+      <input id="craftSearch" placeholder="제작 장비 이름 또는 등급 검색" oninput="renderCrafting()">
+      <select id="craftSlotFilter" onchange="renderCrafting()">
+        <option value="all">모든 부위</option><option value="weapon">무기</option><option value="armor">갑옷</option><option value="helmet">투구</option><option value="gloves">장갑</option><option value="boots">신발</option>
+      </select>
+    </div>
+    <div class="stat"><span>제작식 종류</span><b>225종</b></div>
+    <div id="craftList" class="material-list"></div>
   </div>
 </section>
 
@@ -938,7 +955,8 @@ function materialInfo(id){
     minStage:Math.max(1,centerStage-150),
     maxStage:Math.min(MATERIAL_MAX_STAGE,centerStage+150),
     rarity,
-    sellPrice:5+rarity*5+Math.floor(id/1000)
+    // 재료 ID(=단계 티어)가 높을수록 제곱으로 빠르게 상승하는 판매 가격
+    sellPrice:Math.floor(10*id*id + rarity*id)
   };
 }
 function addMaterial(id,quantity){
@@ -974,6 +992,7 @@ function renderMaterials(){
   if(!list)return;
   const q=($('materialSearch')?.value||'').trim().toLowerCase();
   const items=game.materials.filter(m=>!q||m.name.toLowerCase().includes(q)||String(m.id).includes(q));
+  items.forEach(m=>{const info=materialInfo(m.id);if(info)m.sellPrice=info.sellPrice;});
   $('materialCount').textContent=`${game.materials.length.toLocaleString('ko-KR')} / ${MATERIAL_MAX_SLOTS.toLocaleString('ko-KR')}`;
   list.innerHTML=items.length?items.map(m=>`<div class="material-row"><div><b>${safeText(m.name)}</b><div class="small">ID ${m.id.toLocaleString('ko-KR')} · ${m.minStage.toLocaleString('ko-KR')}~${m.maxStage.toLocaleString('ko-KR')}단계 · 희귀도 ${m.rarity}</div><div class="small">개당 ${fmtMoney(m.sellPrice)}G · 보유 ${Number(m.quantity).toLocaleString('ko-KR')}개</div></div><input aria-label="판매 수량" type="number" min="1" max="${m.quantity}" value="1" id="sellQty${m.id}" style="width:82px"><button onclick="sellMaterial(${m.id})">판매</button></div>`).join(''):'<p class="small" style="padding:10px">검색 결과가 없거나 보유한 재료가 없어.</p>';
 }
@@ -984,19 +1003,19 @@ function sellMaterial(id){
   const qty=Math.floor(Number(qtyInput?.value)||0);
   if(qty<1||qty>item.quantity)return alert('판매할 수량을 올바르게 입력해 줘.');
   item.quantity-=qty;
-  game.money+=qty*item.sellPrice;
+  game.money+=qty*materialInfo(item.id).sellPrice;
   game.materials=game.materials.filter(x=>x.quantity>0);
   render();renderMaterials();syncMaterials();
 }
 function sellAllMaterials(){
   if(!game.materials.length)return alert('판매할 재료가 없어.');
-  const total=game.materials.reduce((sum,m)=>sum+Math.max(0,Number(m.quantity)||0)*Math.max(0,Number(m.sellPrice)||0),0);
+  const total=game.materials.reduce((sum,m)=>sum+Math.max(0,Number(m.quantity)||0)*materialInfo(m.id).sellPrice,0);
   if(!confirm(`모든 재료를 판매하고 ${fmtMoney(total)}G를 받을까?`))return;
   game.money+=total;game.materials=[];render();renderMaterials();syncMaterials();
 }
 async function syncMaterials(){
   if(!game.playerId)return;
-  try{await api('/api/materials/sync',{id:game.playerId,materials:game.materials.map(m=>({id:m.id,quantity:m.quantity}))});}catch(e){console.warn('재료 서버 저장 실패:',e.message);}
+  try{await api('/api/materials/sync',{id:game.playerId,materials:Object.fromEntries(game.materials.map(m=>[String(m.id),m.quantity]))});}catch(e){console.warn('재료 서버 저장 실패:',e.message);}
 }
 async function loadServerMaterials(){
   if(!game.playerId)return;
@@ -1012,6 +1031,82 @@ async function loadServerMaterials(){
     await syncMaterials();
   }catch(e){console.warn('서버 재료 불러오기 실패:',e.message);}
 }
+
+const CRAFT_SLOTS=[
+  ['weapon','무기','⚔️'],['armor','갑옷','🛡️'],['helmet','투구','⛑️'],['gloves','장갑','🧤'],['boots','신발','👢']
+];
+const CRAFT_GRADE_NAMES=['초심','최하급','하급','일반','중급','상급','희귀','초희귀','불멸','유일','고대','영웅','전설','신화','초월'];
+const CRAFT_FAMILIES=['성운','태고','종언'];
+const CRAFT_MATERIAL_NAMES=['재료'];
+function craftRecipe(recipeId){
+  const id=Number(recipeId);
+  if(!Number.isInteger(id)||id<1||id>225)return null;
+  const zero=id-1,slotIndex=Math.floor(zero/45),gradeIndex=Math.floor((zero%45)/3),variant=zero%3;
+  const slot=CRAFT_SLOTS[slotIndex],grade=gradeIndex+1,quality=grade*grade;
+  const materialBase=Math.min(99990,Math.max(1,gradeIndex*6500+slotIndex*700+variant*170+1));
+  const materials=[
+    {id:materialBase,quantity:2+Math.floor(grade/3)},
+    {id:Math.min(100000,materialBase+37+slotIndex*3),quantity:1+Math.floor(grade/4)},
+    {id:Math.min(100000,materialBase+91+variant*7),quantity:1+Math.floor(grade/5)}
+  ];
+  const statSets={
+    weapon:['atk','critDmg','pen','crit'],
+    armor:['def','hp','regen','life'],
+    helmet:['hp','acc','luck','def'],
+    gloves:['atk','spd','crit','acc'],
+    boots:['spd','evade','luck','regen']
+  };
+  const keys=statSets[slot[0]],bonus={};
+  for(let j=0;j<keys.length;j++){
+    if(j<3 || ((grade+variant+j)%3===0)) bonus[keys[j]]=Math.max(1,quality*(j===0?12:j===1?7:4)*(variant+1));
+  }
+  const family=CRAFT_FAMILIES[variant];
+  return {
+    recipeId:id,name:`${family} ${CRAFT_GRADE_NAMES[gradeIndex]} ${slot[1]}`,
+    slot:slot[0],slotName:slot[1],icon:slot[2],grade,
+    bonus,materials,craftOnly:true,source:'craft',
+    price:Math.max(100,quality*10000*(variant+1))
+  };
+}
+function renderCrafting(){
+  const list=$('craftList'); if(!list)return;
+  const q=($('craftSearch')?.value||'').trim().toLowerCase();
+  const filter=$('craftSlotFilter')?.value||'all';
+  const recipes=[];
+  for(let id=1;id<=225;id++){
+    const r=craftRecipe(id);
+    if((filter==='all'||r.slot===filter)&&(!q||r.name.toLowerCase().includes(q)||String(r.grade).includes(q)))recipes.push(r);
+  }
+  list.innerHTML=recipes.map(r=>{
+    const needs=r.materials.map(m=>{const have=game.materials.find(x=>Number(x.id)===m.id)?.quantity||0;const info=materialInfo(m.id);return `${safeText(info?.name||('재료 #'+m.id))} ${m.quantity}개 (보유 ${have}개)`;}).join(' · ');
+    return `<div class="craft-row"><b>${r.icon} ${safeText(r.name)}</b> <span class="grade grade-${r.grade}">${r.grade}등급</span>
+      <div class="craft-stats">${bonusText(r.bonus)}</div><div class="craft-recipe">필요 재료: ${needs}</div>
+      <button onclick="craftGear(${r.recipeId})">제작하기</button></div>`;
+  }).join('')||'<p class="small" style="padding:12px">검색 결과가 없어.</p>';
+}
+async function craftGear(recipeId){
+  if(!game.playerId)return alert('온라인 플레이어로 접속한 뒤 제작할 수 있어.');
+  const recipe=craftRecipe(recipeId);
+  if(!recipe)return alert('잘못된 제작식이야.');
+  for(const need of recipe.materials){
+    const have=game.materials.find(x=>Number(x.id)===need.id)?.quantity||0;
+    if(have<need.quantity)return alert('제작 재료가 부족해. 필요한 재료와 수량을 확인해 줘.');
+  }
+  try{
+    const result=await api('/api/craft',{id:game.playerId,recipeId:Number(recipeId)});
+    if(!result.success||!result.item)throw new Error(result.error||'제작에 실패했어.');
+    for(const need of recipe.materials){
+      const item=game.materials.find(x=>Number(x.id)===need.id);
+      if(item)item.quantity-=need.quantity;
+    }
+    game.materials=game.materials.filter(x=>x.quantity>0);
+    game.inventory.push(result.item);
+    render();renderMaterials();renderCrafting();
+    persistGame();
+    alert(`${result.item.name} 제작 완료!`);
+  }catch(e){alert(e.message||'장비 제작에 실패했어.');}
+}
+
 function activeHero(){return game.heroes.find(h=>h.id===game.selectedHeroId)||game.heroes[0]||null}
 function rollRank(){
   let total=RANK_WEIGHTS.reduce((a,b)=>a+b,0),n=Math.random()*total;
@@ -1187,6 +1282,7 @@ function tab(id){
   render();
   if(id==='gear'&&!catalogRendered)renderGearCatalog();
   if(id==='materials')renderMaterials();
+  if(id==='craft')renderCrafting();
   if(id==='boss')renderBossPreview();
   if(id==='trade'){ $('myPlayerNumber').textContent=game.playerId||'서버 접속 후 표시'; loadTradeInbox(); }
 }
