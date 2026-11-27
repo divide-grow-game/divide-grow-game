@@ -116,6 +116,8 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
   <button class="tab" data-tab="gear" onclick="tab('gear')">🎒 장비 전체 목록</button>
   <button class="tab" data-tab="materials" onclick="tab('materials')">🧱 재료 보관함</button>
   <button class="tab" data-tab="battle" onclick="tab('battle')">⚔️ 전투</button>
+  <button class="tab" data-tab="dungeon" onclick="tab('dungeon')">🏰 던전</button>
+  <button class="tab" data-tab="trade" onclick="tab('trade')">🤝 거래</button>
   <button class="tab" data-tab="pvp" onclick="tab('pvp')">🌐 온라인 PvP</button>
   <button class="tab" data-tab="ranking" onclick="tab('ranking')">🏆 랭킹</button>
   <button class="tab" data-tab="boss" onclick="tab('boss')">🐉 보스전</button>
@@ -164,8 +166,8 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
 
 <section id="materials" class="grid hidden">
   <div class="panel">
-    <h2>🧱 재료 보관함</h2>
-    <p class="muted">총 100,000종의 재료가 있어. 같은 재료는 한 칸에 수량이 합쳐지고, 최대 2,000종까지 보관할 수 있어.</p>
+    <h2>🎒 인벤토리 재료</h2>
+    <p class="muted">총 100,000종의 재료가 있어. 같은 재료는 한 칸에 수량이 합쳐져. 장비와 재료를 합쳐 최대 2,000칸까지 보관할 수 있어.</p>
     <div class="stat"><span>보유 재료 종류</span><b id="materialCount">0 / 2,000</b></div>
     <div class="material-tools"><input id="materialSearch" placeholder="재료 이름 검색" oninput="renderMaterials()"><button class="secondary" onclick="sellAllMaterials()">전체 재료 판매</button></div>
     <div id="materialList" class="material-list"><p class="small">아직 보유한 재료가 없어.</p></div>
@@ -185,6 +187,40 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
   <div class="panel half"><h2>전투 기록</h2><div id="battleLog" class="log">전투를 시작하면 결과가 표시돼.</div></div>
 </section>
 
+<section id="dungeon" class="grid hidden">
+  <div class="panel half">
+    <h2>🏰 연속 던전</h2>
+    <p class="muted">1~1,000,000,000단계. 한 단계마다 15회 전투를 연속으로 진행해. 전투가 끝나도 남은 HP를 유지한 채 다음 전투로 넘어가.</p>
+    <label>던전 단계<input id="dungeonLevel" type="number" min="1" max="1000000000" value="1"></label>
+    <div class="actions"><button class="gold" onclick="startDungeon()">던전 시작</button><button class="secondary" onclick="resumeDungeon()">진행 이어하기</button><button class="secondary" onclick="abandonDungeon()">던전 포기</button></div>
+    <div id="dungeonStatus" class="small">던전을 시작하면 15회 전투가 순서대로 진행돼.</div>
+  </div>
+  <div class="panel half"><h2>던전 전투 기록</h2><div id="dungeonLog" class="log">아직 던전 기록이 없어.</div></div>
+</section>
+
+<section id="trade" class="grid hidden">
+  <div class="panel half">
+    <h2>🤝 플레이어 거래</h2>
+    <p class="muted">상대의 고유 번호를 입력해 거래를 요청해. 거래를 하려면 양쪽 모두 온라인 서버에 접속해야 해.</p>
+    <p class="small">내 고유 번호: <b id="myPlayerNumber">서버 접속 후 표시</b></p>
+    <label>상대 고유 번호<input id="tradeTargetId" placeholder="상대의 고유 번호"></label>
+    <button class="gold" onclick="sendTradeRequest()">거래 요청 보내기</button>
+    <h3>받은 거래 요청</h3><div id="tradeInbox" class="small">거래 요청이 없어.</div>
+    <h3>진행 중인 거래</h3><div id="tradeSessions" class="small">진행 중인 거래가 없어.</div>
+  </div>
+  <div class="panel half">
+    <h2>🔄 공유 거래 화면</h2>
+    <div id="tradeRoom" class="small">거래 요청을 수락하면 이곳에 양쪽이 공유하는 거래 화면이 열려.</div>
+    <div id="tradeEditor" class="hidden">
+      <label>제안할 골드<input id="tradeGold" type="number" min="0" value="0"></label>
+      <label>제안할 장비<select id="tradeGear"><option value="">장비 선택 안 함</option></select></label>
+      <label>제안할 재료<select id="tradeMaterial"><option value="">재료 선택 안 함</option></select></label>
+      <label>재료 수량<input id="tradeMaterialQty" type="number" min="1" value="1"></label>
+      <div class="actions"><button onclick="saveTradeOffer()">제안 갱신</button><button class="gold" onclick="confirmTrade()">거래 확정</button><button class="secondary" onclick="declineTrade()">거절하고 나가기</button></div>
+    </div>
+  </div>
+</section>
+
 <section id="pvp" class="grid hidden">
   <div class="panel half">
     <h2>🌐 온라인 자동 PvP</h2><p class="muted">같은 서버에 접속한 다른 플레이어와 자동 대전을 진행해.</p>
@@ -202,8 +238,8 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
 <section id="boss" class="grid hidden">
   <div class="panel">
     <h2>🐉 월드 보스 토벌</h2>
-    <p class="muted">매일 오전 10시~오후 10시, 오후 10시~다음 날 오전 10시 주기로 보스가 교체돼. 한 주기마다 보스 3종이 등장하며 원하는 보스를 선택할 수 있어.</p>
-    <p class="small">보스 목록을 불러오지 못하면 서버 상태와 주소를 확인해 줘. 서버 주소: <b>https://divide-grow-game.onrender.com</b></p>
+    <p class="muted">매일 오전 10시~오후 10시, 오후 10시~다음 날 오전 10시 주기로 보스가 교체돼. 한 주기마다 보스 6종이 등장하며 원하는 보스를 선택할 수 있어.</p>
+    <p class="small">보스 체력은 지정된 200자리 수치이며, 보스 공격력은 10²¹ 이상이야. 내 보스전 체력은 기본 10조이고 내 HP 능력치가 더 높으면 반영돼. 보스 목록을 불러오지 못하면 서버 상태와 주소를 확인해 줘. 서버 주소: <b>https://divide-grow-game.onrender.com</b></p>
     <div class="stat"><span>현재 토벌 주기</span><b id="bossCycle">시간 확인 중...</b></div>
     <div class="stat"><span>다음 갱신까지</span><b id="bossCountdown">--:--:--</b></div>
     <p class="small" id="bossOnlineStatus">공용 보스전은 서버에 접속해야 이용할 수 있어.</p>
@@ -234,7 +270,7 @@ footer{text-align:center;color:#8997bb;font-size:12px;margin-top:20px}
   <div class="panel"><p class="small">안내: 현재 사이트는 정적 GitHub Pages라서 여러 사람에게 동시에 메시지를 전달하거나 보스의 공동 체력·기여도를 공유할 수 없어. 실제 실시간 기능에는 계정 식별, 메시지 저장, 보스 상태 동기화 및 보상 지급을 처리하는 백엔드 서버가 필요해.</p></div>
 </section>
 
-<section id="ranking" class="grid hidden"><div class="panel"><h2>🏆 서버 전체 랭킹</h2><button onclick="loadRanking()">랭킹 새로고침</button><div id="rankingTable" style="margin-top:12px" class="small">온라인 서버에 접속한 뒤 불러올 수 있어.</div></div></section>
+<section id="ranking" class="grid hidden"><div class="panel"><h2>🏆 서버 전체 랭킹</h2><button onclick="loadRanking()">랭킹 새로고침</button><div id="rankingTable" style="margin-top:12px" class="small">온라인 서버에 접속한 뒤 불러올 수 있어.</div><div id="myRanking" class="stat" style="margin-top:12px"><span>내 전체 랭킹</span><b>서버 접속 후 표시</b></div></div></section>
 <footer>분신 키우기 · 진행 상황은 브라우저에 자동 저장돼.</footer>
 </main>
 
@@ -298,6 +334,7 @@ let bossData=[],selectedBossId=null;
 let bossPlayerHp=0n,bossMaxPlayerHp=0n,bossContribution=0n;
 let bossBusy=false,bossPreviewBusy=false;
 let bossLogLines=[],bossStatusEffects=[];
+let dungeonRun=null,dungeonBusy=false,activeTradeId=null,tradePollTimer=null,tradeReceiveGear=[],tradeReceiveMaterials={};
 
 const BOSS_NAMES=[
   '고대의 화염룡','심연의 해신','천공의 거신','망각의 수호자',
@@ -558,7 +595,7 @@ async function renderBossPreview(){
     if(selectedBossId)renderBossBattle();
   }catch(error){
     $('bossOnlineStatus').textContent=`보스 서버에 연결하지 못했어: ${error.message||'알 수 없는 오류'} · 서버 주소: https://divide-grow-game.onrender.com`; 
-    $('bossCards').innerHTML=[0,1,2].map(n=>{
+    $('bossCards').innerHTML=[0,1,2,3,4,5].map(n=>{
       const idx=(Math.floor((Date.now()-3600000)/43200000)*3+n)%BOSS_NAMES.length;
       const name=BOSS_NAMES[idx];
       const meta=getBossMeta({name});
@@ -1151,6 +1188,7 @@ function tab(id){
   if(id==='gear'&&!catalogRendered)renderGearCatalog();
   if(id==='materials')renderMaterials();
   if(id==='boss')renderBossPreview();
+  if(id==='trade'){ $('myPlayerNumber').textContent=game.playerId||'서버 접속 후 표시'; loadTradeInbox(); }
 }
 
 function render(){
@@ -1224,15 +1262,17 @@ function render(){
       let current=big(h.stats[k]),gain=current/10n;
       if(gain<10n)gain=10n;
       let next=clampStat(current+gain);
-      let digits=current.toString().length;
-      let cost=40+digits*8+Math.floor(Number(current%1000n)/100);
+      let rawCost=40n+(current/10n);
+      const maxMoney=9000000000000000n;
+      if(rawCost>maxMoney)rawCost=maxMoney;
+      let cost=Number(rawCost);
       return `
         <div class="unit">
           <span class="emoji">${ico}</span><b>${n}</b>
           <div class="small">${desc}</div>
           <div class="stat"><span>현재 능력치</span><b>${fmt(current)}</b></div>
           <div class="stat"><span>성장 후</span><b>${fmt(next)}</b></div>
-          <button onclick="grow('${k}',${cost})" ${current>=MAX_VALUE?'disabled':''}>성장 · ${fmtMoney(cost)}G</button>
+          <button onclick="grow('${k}')" ${current>=MAX_VALUE?'disabled':''}>성장 · ${fmtMoney(cost)}G</button>
         </div>
       `;
     }).join('');
@@ -1261,11 +1301,16 @@ function render(){
   persistGame();
 
   if(selectedBossId&&!bossBusy)renderBossBattle();
+  if($('tradeGear'))fillTradeChoices();
 }
 
-function grow(key,cost){
+function grow(key){
   let h=activeHero();
   if(!h)return;
+  const currentForCost=big(h.stats[key]);
+  let costBig=40n+(currentForCost/10n);
+  if(costBig>9000000000000000n)costBig=9000000000000000n;
+  const cost=Number(costBig);
   if(big(h.stats[key])>=MAX_VALUE){
     alert('이 능력치는 최대값에 도달했어.');
     return;
@@ -1470,7 +1515,7 @@ function startBattle(){
   render();
 }
 
-function autoFight(hero,stage){
+function autoFight(hero,stage,hpStart=null){
   let s=gearStats(hero);
   let st=BigInt(stage);
   let enemy={
@@ -1480,7 +1525,8 @@ function autoFight(hero,stage){
     spd:8n+st/1000n,
     evade:Math.min(70,Math.floor(stage/200000))
   };
-  let hp=s.hp,ehp=enemy.hp;
+  let hp=hpStart===null?s.hp:big(hpStart),ehp=enemy.hp;
+  if(hp>s.hp)hp=s.hp;
   let lines=[`<b>${safeText(hero.name)}</b> · 전투 ${stage.toLocaleString('en-US')}단계`];
 
   for(let turn=1;turn<=30&&hp>0n&&ehp>0n;turn++){
@@ -1515,8 +1561,92 @@ function autoFight(hero,stage){
     }
     if(s.regen>0n&&hp>0n)hp=hp+s.regen>s.hp?s.hp:hp+s.regen;
   }
-  return{win:hp>0n&&ehp<=0n,lines};
+  return{win:hp>0n&&ehp<=0n,lines,hpRemaining:hp.toString(),maxHp:s.hp.toString()};
 }
+
+async function syncGameState(){
+  if(!game.playerId)return;
+  await api('/api/game-state/sync',{id:game.playerId,money:String(Math.max(0,Math.floor(Number(game.money)||0))),inventory:game.inventory,materials:game.materials});
+}
+async function startDungeon(){
+  if(dungeonBusy)return;
+  const h=activeHero();if(!h)return alert('먼저 분신을 만들어 줘.');
+  if(!game.playerId)return alert('던전 기록을 서버에 저장하려면 먼저 온라인 서버에 접속해 줘.');
+  const level=Math.floor(Number($('dungeonLevel').value));if(!Number.isSafeInteger(level)||level<1||level>1000000000)return alert('던전 단계는 1~1,000,000,000이야.');
+  try{
+    const stats=gearStats(h);const r=await api('/api/dungeon/start',{playerId:game.playerId,level,hp:String(stats.hp),maxHp:String(stats.hp),statusEffects:[]});
+    dungeonRun={id:r.runId,level,round:1,hp:String(stats.hp),maxHp:String(stats.hp)};
+    $('dungeonLog').innerHTML='';$('dungeonStatus').textContent=`${level.toLocaleString()}단계 · 1/15 전투`;
+    await runDungeonRound();
+  }catch(e){$('dungeonStatus').textContent=e.message;}
+}
+async function resumeDungeon(){
+  if(!game.playerId)return alert('먼저 서버에 접속해 줘.');
+  try{const r=await api('/api/dungeon/current/'+encodeURIComponent(game.playerId));if(!r.run)return $('dungeonStatus').textContent='이어갈 던전이 없어.';dungeonRun={id:r.run.id,level:Number(r.run.level),round:Number(r.run.round),hp:String(r.run.state.hp),maxHp:String(r.run.state.maxHp)};$('dungeonStatus').textContent=`${dungeonRun.level.toLocaleString()}단계 · ${dungeonRun.round}/15 전투 이어하기`;$('dungeonLog').innerHTML='저장된 던전 상태를 불러왔어.';await runDungeonRound();}catch(e){$('dungeonStatus').textContent=e.message;}
+}
+async function runDungeonRound(){
+  if(!dungeonRun||dungeonBusy)return;const h=activeHero();if(!h)return;
+  dungeonBusy=true;
+  try{
+    const stage=Math.min(10000000,dungeonRun.level);
+    const result=autoFight(h,stage,dungeonRun.hp);dungeonRun.hp=result.hpRemaining;
+    $('dungeonLog').insertAdjacentHTML('beforeend',`<p><b>${dungeonRun.round}/15회 전투</b></p>${result.lines.join('<br>')}<p class="${result.win?'good':'bad'}">${result.win?'승리':'패배'} · 남은 HP ${fmtUncapped(dungeonRun.hp)}</p><hr>`);
+    $('dungeonLog').scrollTop=$('dungeonLog').scrollHeight;
+    if(!result.win){await api('/api/dungeon/abandon',{playerId:game.playerId,runId:dungeonRun.id});dungeonRun=null;$('dungeonStatus').textContent='던전 실패. 남은 HP가 0이거나 전투에서 패배했어.';return;}
+    const reward=50+dungeonRun.level*20;game.money+=reward;game.wins++;
+    const drops=grantBattleMaterials(dungeonRun.level);syncMaterials();
+    const completed=dungeonRun.round===15;
+    await api('/api/dungeon/advance',{playerId:game.playerId,runId:dungeonRun.id,round:dungeonRun.round,state:{hp:dungeonRun.hp,maxHp:dungeonRun.maxHp,statusEffects:[]}});
+    if(completed){$('dungeonStatus').textContent=`${dungeonRun.level.toLocaleString()}단계 던전 클리어! 15회 연속 승리했어.`;dungeonRun=null;}
+    else{dungeonRun.round++;$('dungeonStatus').textContent=`${dungeonRun.level.toLocaleString()}단계 · ${dungeonRun.round}/15 전투 · HP ${fmtUncapped(dungeonRun.hp)}`;}
+    render();
+    if(dungeonRun){dungeonBusy=false;await new Promise(resolve=>setTimeout(resolve,350));await runDungeonRound();}
+  }catch(e){$('dungeonStatus').textContent='던전 저장 오류: '+e.message;}
+  finally{dungeonBusy=false;}
+}
+async function abandonDungeon(){if(!dungeonRun)return;try{await api('/api/dungeon/abandon',{playerId:game.playerId,runId:dungeonRun.id});}catch{}dungeonRun=null;$('dungeonStatus').textContent='던전을 포기했어.';}
+
+async function sendTradeRequest(){
+  if(!game.playerId)return alert('먼저 온라인 서버에 접속해 줘.');
+  const toId=$('tradeTargetId').value.trim();if(!toId)return alert('상대 고유 번호를 입력해 줘.');
+  try{await syncGameState();const r=await api('/api/trade/request',{fromId:game.playerId,toId});alert(`거래 요청을 보냈어. 요청 번호: ${r.requestId}`);loadTradeInbox();}catch(e){alert(e.message);}
+}
+async function loadTradeInbox(){
+  if(!game.playerId)return;
+  try{const r=await api('/api/trade/inbox/'+encodeURIComponent(game.playerId));
+    $('tradeInbox').innerHTML=(r.requests||[]).map(x=>`<div class="unit">${safeText(x.name||x.from_player)}의 거래 요청 <button onclick="respondTrade('${x.id}',true)">수락</button> <button class="secondary" onclick="respondTrade('${x.id}',false)">거절</button></div>`).join('')||'받은 거래 요청이 없어.';
+    $('tradeSessions').innerHTML=(r.sessions||[]).map(x=>`<div class="unit">거래 #${x.id} · ${x.player_a===game.playerId?'상대 '+safeText(x.player_b):'상대 '+safeText(x.player_a)} <button onclick="openTrade('${x.id}')">거래방 열기</button></div>`).join('')||'진행 중인 거래가 없어.';
+    if(activeTradeId)await refreshTradeRoom();
+  }catch(e){$('tradeInbox').textContent=e.message;}
+}
+async function respondTrade(id,accept){try{const r=await api('/api/trade/request/'+id+'/respond',{playerId:game.playerId,accept});if(r.sessionId)openTrade(r.sessionId);loadTradeInbox();}catch(e){alert(e.message);}}
+function openTrade(id){activeTradeId=String(id);$('tradeEditor').classList.remove('hidden');refreshTradeRoom();if(tradePollTimer)clearInterval(tradePollTimer);tradePollTimer=setInterval(refreshTradeRoom,1500);}
+async function refreshTradeRoom(){
+  if(!activeTradeId||!game.playerId)return;
+  try{const r=await api('/api/trade/session/'+activeTradeId+'?playerId='+encodeURIComponent(game.playerId));const t=r.session;
+    const other=t.otherOffer||{};
+    if(!tradeReceiveGear.length && (other.gear||[]).length)tradeReceiveGear=(other.gear||[]).map(x=>String(x.uid));
+    if(!Object.keys(tradeReceiveMaterials).length)(other.materials||[]).forEach(x=>tradeReceiveMaterials[String(x.id)]=Number(x.quantity)||0);
+    const receiveHtml=`<h3>받을 물건 선택</h3><p class="small">인벤토리가 부족하면 체크를 해제하거나 재료 수량을 줄여서 원하는 물건만 받을 수 있어.</p>`+
+      (other.gear||[]).map(g=>`<label><input type="checkbox" style="width:auto" ${tradeReceiveGear.includes(String(g.uid))?'checked':''} onchange="toggleTradeGear('${safeText(g.uid)}',this.checked)"> ${safeText(g.name||'장비')} (${g.grade||'-'}등급)</label>`).join('')+
+      (other.materials||[]).map(m=>`<label>${safeText(m.name||'재료')} · 제안 ${m.quantity}개 <input type="number" min="0" max="${Number(m.quantity)||0}" value="${tradeReceiveMaterials[String(m.id)]??m.quantity}" onchange="setTradeMaterialReceive('${safeText(m.id)}',this.value)"></label>`).join('');
+    $('tradeRoom').innerHTML=`<p>거래 상대: <b>${safeText(t.playerA===game.playerId?t.playerB:t.playerA)}</b></p><p>내 확정: ${t.myConfirmed?'완료':'대기'} · 상대 확정: ${t.otherConfirmed?'완료':'대기'}</p><h3>내 제안</h3><pre>${safeText(JSON.stringify(t.myOffer,null,2))}</pre><h3>상대 제안</h3><pre>${safeText(JSON.stringify(t.otherOffer,null,2))}</pre>${receiveHtml}`;
+    if(t.status==='completed'){await loadGameStateFromServer();$('tradeRoom').insertAdjacentHTML('beforeend','<p class="good">거래가 완료됐어!</p>');activeTradeId=null;if(tradePollTimer)clearInterval(tradePollTimer);}
+    if(t.status!=='active'&&t.status!=='completed'){$('tradeRoom').insertAdjacentHTML('beforeend','<p class="bad">거래가 취소됐어.</p>');activeTradeId=null;if(tradePollTimer)clearInterval(tradePollTimer);}
+  }catch(e){$('tradeRoom').textContent=e.message;}
+}
+function fillTradeChoices(){
+  $('tradeGear').innerHTML='<option value="">장비 선택 안 함</option>'+game.inventory.map(g=>`<option value="${safeText(g.uid)}">${safeText(g.name)} · ${g.grade}등급</option>`).join('');
+  $('tradeMaterial').innerHTML='<option value="">재료 선택 안 함</option>'+game.materials.map(m=>`<option value="${m.id}">${safeText(m.name)} · ${m.quantity}개</option>`).join('');
+}
+function toggleTradeGear(uid,checked){if(checked&&!tradeReceiveGear.includes(uid))tradeReceiveGear.push(uid);if(!checked)tradeReceiveGear=tradeReceiveGear.filter(x=>x!==uid);}
+function setTradeMaterialReceive(id,value){tradeReceiveMaterials[String(id)]=Math.max(0,Math.floor(Number(value)||0));}
+async function saveTradeOffer(){
+  if(!activeTradeId)return;try{await syncGameState();const gearUid=$('tradeGear').value,materialId=$('tradeMaterial').value;const gear=gearUid?game.inventory.filter(x=>String(x.uid)===gearUid):[];const material=materialId?game.materials.filter(x=>String(x.id)===materialId).map(x=>({...x,quantity:Math.min(Number(x.quantity),Math.max(1,Math.floor(Number($('tradeMaterialQty').value)||1)))})):[];const gold=String(Math.max(0,Math.floor(Number($('tradeGold').value)||0)));const acceptMaterials=Object.entries(tradeReceiveMaterials).map(([id,quantity])=>({id,quantity}));await api('/api/trade/session/'+activeTradeId+'/offer',{playerId:game.playerId,offer:{gold,gear,materials:material,acceptGear:tradeReceiveGear,acceptMaterials}});await refreshTradeRoom();alert('거래 제안을 갱신했어.');}catch(e){alert(e.message);}
+}
+async function confirmTrade(){if(!activeTradeId)return;try{await syncGameState();const r=await api('/api/trade/session/'+activeTradeId+'/confirm',{playerId:game.playerId});if(r.completed){await loadGameStateFromServer();alert('거래가 완료됐어!');}else alert('내 거래 확정을 저장했어. 상대방의 확정을 기다리는 중이야.');await refreshTradeRoom();}catch(e){alert(e.message);}}
+async function declineTrade(){if(!activeTradeId)return;try{await api('/api/trade/session/'+activeTradeId+'/decline',{playerId:game.playerId});activeTradeId=null;if(tradePollTimer)clearInterval(tradePollTimer);$('tradeRoom').textContent='거래를 취소했어.';loadTradeInbox();}catch(e){alert(e.message);}}
+async function loadGameStateFromServer(){try{const r=await api('/api/game-state/'+encodeURIComponent(game.playerId));if(r.state){game.money=Number(r.state.money);game.inventory=r.state.inventory||[];game.materials=r.state.materials||[];render();renderMaterials();persistGame();}}catch(e){console.warn(e);}}
 
 async function api(path,body){
   const response=await fetch(apiBase+path,{
@@ -1557,6 +1687,9 @@ async function connectServer(){
     $('queueText').textContent='서버에 접속했어. 대전 상대를 찾을 수 있어.';
     loadRanking();
     await loadServerMaterials();
+    await syncGameState();
+    $('myPlayerNumber').textContent=game.playerId;
+    fillTradeChoices();
 
     if(pollTimer)clearInterval(pollTimer);
     pollTimer=setInterval(checkMatch,1700);
@@ -1644,8 +1777,10 @@ async function checkMatch(){
 
 async function loadRanking(){
   try{
-    let r=await api('/api/rankings');
+    let r=await api('/api/rankings'+(game.playerId?'?id='+encodeURIComponent(game.playerId):''));
+    $('myRanking').innerHTML=`<span>내 전체 랭킹</span><b>${r.myRank?`${r.myRank.toLocaleString('ko-KR')}위`:'아직 랭킹 기록 없음'}</b>`;
     $('rankingTable').innerHTML=`
+      <p class="small">상위 ${r.players.length}명 표시 · 전체 플레이어 기준 내 순위는 위에 표시돼.</p>
       <table>
         <tr><th>순위</th><th>플레이어</th><th>분신</th><th>등급</th><th>전투력</th><th>승리</th></tr>
         ${r.players.map((p,i)=>`
@@ -1661,7 +1796,7 @@ async function loadRanking(){
       </table>
     `;
   }catch(e){
-    $('rankingTable').textContent='온라인 PvP 서버가 아직 연결되지 않았어. GitHub Pages는 화면 파일만 실행하므로 별도 온라인 서버를 배포해야 랭킹을 사용할 수 있어.';
+    $('myRanking').innerHTML='<span>내 전체 랭킹</span><b>서버 접속 후 표시</b>'; $('rankingTable').textContent='온라인 서버에 접속하면 상위 100명과 내 전체 순위를 확인할 수 있어.';
   }
 }
 
@@ -1676,6 +1811,7 @@ document.addEventListener('visibilitychange',()=>{
 updateStageGuide();
 renderBossPreview();
 setInterval(()=>{
+  if(game.playerId && $('trade') && !$('trade').classList.contains('hidden')) loadTradeInbox();
   const info=bossWindowInfo();
   $('bossCycle').textContent=info.label;
   $('bossCountdown').textContent=new Date(info.remaining).toISOString().slice(11,19);
